@@ -50,7 +50,13 @@ stronger approach (deeper reasoning, broader context, next model up).
 Use the smallest model that reliably solves the task. Simple explanation,
 rename, or single-file edit must not trigger heavy reasoning or deep scans.
 
-## 6. Never do this
+## 6. Paused routing
+
+If no routing block was injected, routing is paused (`clearjev off`,
+`CLEARJEV_ENABLED=0`, or a `noroute:` prompt) — work normally and do not ask
+about it. The user re-enables it with `clearjev on`.
+
+## 7. Never do this
 
 - Never invent model capabilities; profiles live in
   `assets/router-config.yaml` / `references/models.md`.

@@ -39,8 +39,33 @@ Then restart Codex (CLI or App), review the hook once in `/hooks`, and just
 write prompts. Verify anytime with:
 
 ```bash
-python3 ~/.codex/skills/clearjev-router/scripts/jev_route.py --check
+clearjev status   # on/off state, key presence, smoke test
+clearjev check    # full verification incl. live Jev ping
 ```
+
+## On / off
+
+Works in Codex CLI and App, no restart needed (the hook re-reads the flag on
+every prompt, paused = silent no-op, zero cost):
+
+```bash
+clearjev off      # pause routing
+clearjev on       # resume routing
+clearjev status   # show state
+```
+
+More ways:
+
+| Method | Scope | How |
+|---|---|---|
+| `clearjev off/on` | persistent, CLI+App | state file (`$PLUGIN_DATA` or `~/.codex/clearjev.json`) |
+| `CLEARJEV_ENABLED=0 <cmd>` | one process | env kill-switch, overrides everything |
+| `noroute:` prompt prefix | one prompt | start the prompt with `noroute:` to skip routing once |
+| CLI `/plugins` → Space | plugin on/off | Codex-native, needs a new session |
+| CLI `/hooks` | hook on/off | Codex-native hook browser |
+| App Plugins tab | install/uninstall | Codex-native |
+
+Precedence: `CLEARJEV_ENABLED` env > state file > default ON.
 
 ## Codex Hub / marketplace
 
@@ -61,12 +86,13 @@ plugins/clearjev-router/
   skills/clearjev-router/SKILL.md
   hooks/hooks.json               # UserPromptSubmit -> jev_route.py
   scripts/jev_route.py           # the router: Jev batch call + code composition (stdlib only)
+  scripts/clearjev[.cmd]         # on|off|status|check CLI (installed to ~/.local/bin)
   scripts/install.sh / install.ps1
   references/jev-questions.md    # exact Choice/Score/Noul definitions
   references/routing.md          # weights, thresholds, escalation
   references/models.md           # GPT-6 Astra/Sol/Terra/Luna capability profiles
   assets/router-config.yaml      # all tunable constants in one place
-tests/test_router.py             # 9 tests, no network needed
+tests/test_router.py             # 15 tests, no network needed
 ```
 
 ## How routing works

@@ -16,7 +16,8 @@
     "category": "Productivity",
     "defaultPrompt": [
       "Route this task with ClearJev before implementing.",
-      "Explain the ClearJev routing decision for my last prompt."
+      "Explain the ClearJev routing decision for my last prompt.",
+      "Pause ClearJev routing for now."
     ]
   }
 }

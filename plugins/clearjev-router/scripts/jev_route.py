@@ -18,6 +18,17 @@ and Linux with stock python3 and no pip install.
 Env:
   TYPESAFE_API_KEY (fallback JEV_API_KEY) - without it, a clearly labeled
   heuristic fallback is used so the layer still works out of the box.
+  CLEARJEV_ENABLED=0 - instant kill-switch: the hook exits silently (no
+  routing, no Jev call, no cost). Any of 0/false/no/off disables;
+  1/true/yes/on forces enabled. Unset = follow the state file.
+  CLEARJEV_STATE - override path of the on/off state file (used by tests).
+
+On/off (persistent, works in Codex CLI and App, no restart needed):
+  python3 jev_route.py --off     # pause routing
+  python3 jev_route.py --on      # resume routing
+  python3 jev_route.py --status  # show on/off + key + routing smoke test
+
+Per-prompt bypass: start the prompt with "noroute:" to skip routing once.
 
 Usage:
   echo '{"prompt":"...","cwd":"."}' | python3 jev_route.py
@@ -479,11 +490,86 @@ def emit(additional_context):
         "additionalContext": additional_context}}))
 
 
+# ---------------------------------------------------------------- on/off switch
+
+def state_path():
+    """Where the persistent on/off flag lives.
+
+    Precedence: $CLEARJEV_STATE > $PLUGIN_DATA/state.json > ~/.codex/clearjev.json.
+    PLUGIN_DATA is set by Codex for plugin-bundled hooks; the ~/.codex
+    fallback covers standalone skill installs.
+    """
+    override = os.environ.get("CLEARJEV_STATE")
+    if override:
+        return override
+    plugin_data = os.environ.get("PLUGIN_DATA")
+    if plugin_data:
+        return os.path.join(plugin_data, "state.json")
+    return os.path.join(os.path.expanduser("~"), ".codex", "clearjev.json")
+
+
+def is_disabled():
+    """True when routing must stay silent. Never raises."""
+    env = os.environ.get("CLEARJEV_ENABLED", "").strip().lower()
+    if env in ("0", "false", "no", "off"):
+        return True, "env CLEARJEV_ENABLED=0"
+    if env in ("1", "true", "yes", "on"):
+        return False, ""
+    try:
+        with open(state_path()) as f:
+            data = json.load(f)
+        if isinstance(data, dict) and data.get("enabled") is False:
+            return True, state_path()
+    except (OSError, ValueError):
+        pass
+    return False, ""
+
+
+def set_enabled(enabled):
+    """Persist the on/off flag. Returns (ok, message). Never raises."""
+    path = state_path()
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump({"enabled": bool(enabled)}, f)
+        return True, path
+    except OSError as exc:
+        return False, str(exc)
+
+
+def status():
+    """Human-readable status for `clearjev status`. Manual use only."""
+    disabled, reason = is_disabled()
+    key = os.environ.get("TYPESAFE_API_KEY") or os.environ.get("JEV_API_KEY")
+    print("ClearJev status")
+    print("- routing: " + ("OFF (" + reason + ")" if disabled else "ON"))
+    print("- state file: " + state_path())
+    print("- TYPESAFE_API_KEY: " + ("set" if key else "MISSING (heuristic fallback)"))
+    demo = heuristic_route("Add a dark mode toggle to the settings page.", {})
+    print("- fallback smoke: %s/%.0f/%s" % (demo["intent"], demo["complexity"], demo["model"]))
+    return 0
+
+
 # ---------------------------------------------------------------- entry
 
 def main(argv):
+    if "--off" in argv:
+        ok, msg = set_enabled(False)
+        print("ClearJev routing OFF (" + msg + ")" if ok else "Failed: " + msg)
+        return 0 if ok else 1
+    if "--on" in argv:
+        ok, msg = set_enabled(True)
+        print("ClearJev routing ON (" + msg + ")" if ok else "Failed: " + msg)
+        return 0 if ok else 1
+    if "--status" in argv:
+        return status()
     if "--check" in argv:
         return check()
+    disabled, _reason = is_disabled()
+    if disabled:
+        return 0  # paused: silent no-op, zero cost
     prompt, cwd = "", ""
     if "--prompt" in argv:
         try:
@@ -513,6 +599,8 @@ def main(argv):
         cwd = payload.get("cwd", "") if isinstance(payload, dict) else ""
     if not prompt:
         return 0  # fail-open: nothing to judge
+    if prompt.lstrip().lower().startswith("noroute:"):
+        return 0  # one-shot bypass for this prompt only
     if not cwd or not os.path.isdir(cwd):
         cwd = os.getcwd()
 

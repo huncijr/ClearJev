@@ -32,3 +32,5 @@ Any coding task: implement, debug, refactor, architect, review, research, test, 
 - Never invent model capabilities — read them from `assets/router-config.yaml`.
 - Never block the session on routing failure; exit 0 with empty output.
 - Keep `additionalContext` under ~6 lines; details stay in references.
+- On/off: `clearjev off/on/status`, `CLEARJEV_ENABLED=0` for one process,
+  `noroute:` prompt prefix to skip once. Paused = silent no-op; say nothing.

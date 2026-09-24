@@ -1,0 +1,23 @@
+#!/bin/sh
+# clearjev — thin CLI for the ClearJev router (macOS / Linux).
+# Installed to ~/.local/bin by install.sh. Usage:
+#   clearjev on | off | status | check | --prompt "..." | --help
+set -eu
+DIR="$(cd "$(dirname "$0")" && pwd)"
+# When installed via symlink, resolve to the real plugin scripts dir.
+if command -v readlink >/dev/null 2>&1; then
+  R="$(readlink "$0" 2>/dev/null || true)"
+  case "$R" in
+    /*) DIR="$(cd "$(dirname "$R")" && pwd)" ;;
+    ?*) DIR="$(cd "$(dirname "$0")/$(dirname "$R")" && pwd)" ;;
+  esac
+fi
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ $# -eq 0 ]; then
+  echo "Usage: clearjev on|off|status|check [--prompt ...] [--cwd ...]"
+  echo "  on/off   resume or pause pre-prompt routing (persistent, no restart needed)"
+  echo "  status   show on/off state, API key presence, routing smoke test"
+  echo "  check    full setup verification incl. live Jev ping (needs TYPESAFE_API_KEY)"
+  echo "Env: CLEARJEV_ENABLED=0 pauses for one process; prefix a prompt with 'noroute:' to skip once."
+  exit 0
+fi
+exec python3 "$DIR/jev_route.py" "$@"

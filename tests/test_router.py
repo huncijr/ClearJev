@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 HOOK = os.path.join(os.path.dirname(__file__), "..",
@@ -14,12 +15,33 @@ def run_hook(payload, env_extra=None):
     env = dict(os.environ)
     env.pop("TYPESAFE_API_KEY", None)
     env.pop("JEV_API_KEY", None)
+    # Hermetic on/off state: never touch the real ~/.codex or $PLUGIN_DATA.
+    tmp = tempfile.mkdtemp(prefix="clearjev-test-")
+    env["CLEARJEV_STATE"] = os.path.join(tmp, "state.json")
+    env.pop("CLEARJEV_ENABLED", None)
+    env.pop("PLUGIN_DATA", None)
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
         [sys.executable, HOOK], input=json.dumps(payload),
         capture_output=True, text=True, timeout=30, cwd="/tmp", env=env)
     return proc
+
+
+def run_cli(*args, env_extra=None):
+    env = dict(os.environ)
+    env.pop("TYPESAFE_API_KEY", None)
+    env.pop("JEV_API_KEY", None)
+    tmp = tempfile.mkdtemp(prefix="clearjev-test-")
+    env["CLEARJEV_STATE"] = os.path.join(tmp, "state.json")
+    env.pop("CLEARJEV_ENABLED", None)
+    env.pop("PLUGIN_DATA", None)
+    if env_extra:
+        env.update(env_extra)
+    proc = subprocess.run(
+        [sys.executable, HOOK, *args],
+        capture_output=True, text=True, timeout=30, cwd="/tmp", env=env)
+    return proc, env["CLEARJEV_STATE"]
 
 
 def decision(payload):
@@ -92,6 +114,51 @@ class TestSpecExamples(unittest.TestCase):
                         "cwd": "/tmp"})
         self.assertIn("debug", ctx)
         self.assertIn("gpt-6-sol", ctx)
+
+
+class TestOnOff(unittest.TestCase):
+    """Kill-switch: --on/--off/--status, env override, noroute: prefix."""
+
+    def test_off_silences_hook(self):
+        proc, state = run_cli("--off")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("OFF", proc.stdout)
+        hooked = run_hook({"prompt": "Implement a full auth system.", "cwd": "/tmp"},
+                          {"CLEARJEV_STATE": state})
+        self.assertEqual(hooked.returncode, 0)
+        self.assertEqual(hooked.stdout, "")
+
+    def test_on_restores_hook(self):
+        proc, state = run_cli("--off")
+        proc, _ = run_cli("--on", env_extra={"CLEARJEV_STATE": state})
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("ON", proc.stdout)
+        hooked = run_hook({"prompt": "Implement a full auth system.", "cwd": "/tmp"},
+                          {"CLEARJEV_STATE": state})
+        self.assertIn("additionalContext", hooked.stdout)
+
+    def test_env_zero_overrides_on_file(self):
+        _, state = run_cli("--on")
+        hooked = run_hook({"prompt": "Implement a full auth system.", "cwd": "/tmp"},
+                          {"CLEARJEV_STATE": state, "CLEARJEV_ENABLED": "0"})
+        self.assertEqual(hooked.returncode, 0)
+        self.assertEqual(hooked.stdout, "")
+
+    def test_env_one_overrides_off_file(self):
+        _, state = run_cli("--off")
+        hooked = run_hook({"prompt": "Implement a full auth system.", "cwd": "/tmp"},
+                          {"CLEARJEV_STATE": state, "CLEARJEV_ENABLED": "1"})
+        self.assertIn("additionalContext", hooked.stdout)
+
+    def test_noroute_prefix_skips_once(self):
+        hooked = run_hook({"prompt": "noroute: just do it, no questions.", "cwd": "/tmp"})
+        self.assertEqual(hooked.returncode, 0)
+        self.assertEqual(hooked.stdout, "")
+
+    def test_status_reports(self):
+        proc, _ = run_cli("--status")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("routing: ON", proc.stdout)
 
 
 if __name__ == "__main__":

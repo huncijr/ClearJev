@@ -99,7 +99,18 @@ else:
     print("config already enables skills+hooks")
 EOF
 
-# 5. API key.
+# 5. `clearjev` CLI on PATH (on/off/status without touching config files).
+BIN="$HOME/.local/bin"
+mkdir -p "$BIN"
+cp -f "$SKILL1/scripts/clearjev" "$BIN/clearjev"
+chmod +x "$BIN/clearjev"
+echo "cli -> $BIN/clearjev"
+case ":$PATH:" in
+  *":$BIN:"*) ;;
+  *) echo "NOTE: add to PATH (e.g. export PATH=\"\$HOME/.local/bin:\$PATH\") to use 'clearjev on|off|status'." ;;
+esac
+
+# 6. API key.
 if [ -z "${TYPESAFE_API_KEY:-}" ]; then
   echo ""
   echo "Get a Jev API key at https://console.typesafe.ai/keys"
@@ -124,3 +135,4 @@ python3 "$SKILL1/scripts/jev_route.py" --check || true
 echo ""
 echo "Done. Restart Codex (CLI/App), review the hook once in /hooks, then just write prompts."
 echo "The Jev layer routes every prompt automatically before execution."
+echo "Pause anytime: clearjev off | resume: clearjev on | status: clearjev status"

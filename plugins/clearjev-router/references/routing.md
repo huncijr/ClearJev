@@ -1,5 +1,13 @@
 # Routing — weights, thresholds, escalation (code logic, not prompts)
 
+## On/off precedence (checked first, before any Jev call)
+
+1. `CLEARJEV_ENABLED` env (`0/false/no/off` = paused; `1/true/yes/on` = forced on).
+2. State file: `$CLEARJEV_STATE` > `$PLUGIN_DATA/state.json` > `~/.codex/clearjev.json`
+   (`{"enabled": false}` = paused; managed by `clearjev on/off`).
+3. Default: ON. Prompt prefix `noroute:` skips routing for one prompt.
+Paused = silent no-op (exit 0, empty stdout, no Jev call, zero cost).
+
 ## Complexity 0–100 (composite scoring, in code)
 
 ```

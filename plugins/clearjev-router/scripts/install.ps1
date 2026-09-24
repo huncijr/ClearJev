@@ -74,7 +74,16 @@ if ($need.Count -gt 0) {
   Write-Host "config -> $cfgPath"
 } else { Write-Host "config already enables skills+hooks" }
 
-# 5. API key.
+# 5. `clearjev` CLI on PATH.
+$binDir = Join-Path $HOME ".local/bin"
+if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir | Out-Null }
+Copy-Item -Force (Join-Path $skill1 "scripts/clearjev.cmd") (Join-Path $binDir "clearjev.cmd")
+Write-Host "cli -> $binDir\clearjev.cmd"
+if (($env:PATH -split ";") -notcontains $binDir) {
+  Write-Host "NOTE: add $binDir to your user PATH to use 'clearjev on|off|status'."
+}
+
+# 6. API key.
 if (-not $env:TYPESAFE_API_KEY) {
   Write-Host ""
   Write-Host "Get a Jev API key at https://console.typesafe.ai/keys"
@@ -90,3 +99,4 @@ Write-Host ""
 & $py.Split(" ")[0] $hookScript --check
 Write-Host ""
 Write-Host "Done. Restart Codex (CLI/App), review the hook once in /hooks, then just write prompts."
+Write-Host "Pause anytime: clearjev off | resume: clearjev on | status: clearjev status"
