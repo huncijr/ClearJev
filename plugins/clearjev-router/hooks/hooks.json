@@ -1,0 +1,19 @@
+{
+  "description": "ClearJev pre-prompt routing: Jev judges every prompt before it reaches the model.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/scripts/jev_route.py\"",
+            "command_windows": "py -3 \"%PLUGIN_ROOT%\\scripts\\jev_route.py\"",
+            "timeout": 12,
+            "statusMessage": "ClearJev routing",
+            "additionalContextLimit": 2000
+          }
+        ]
+      }
+    ]
+  }
+}

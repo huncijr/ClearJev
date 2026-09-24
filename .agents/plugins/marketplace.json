@@ -1,0 +1,20 @@
+{
+  "name": "clearjev",
+  "interface": {
+    "displayName": "ClearJev"
+  },
+  "plugins": [
+    {
+      "name": "clearjev-router",
+      "source": {
+        "source": "local",
+        "path": "./plugins/clearjev-router"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

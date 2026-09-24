@@ -1,0 +1,22 @@
+{
+  "name": "clearjev-router",
+  "version": "0.1.0",
+  "description": "Intelligent model routing layer for Codex: Jev (TypeSafe System One) judges every prompt before execution and injects model/reasoning/planning guidance.",
+  "author": {
+    "name": "ClearJev"
+  },
+  "repository": "https://github.com/huncijr/ClearJev",
+  "license": "MIT",
+  "keywords": ["codex", "routing", "jev", "typesafe", "models", "hooks"],
+  "skills": "./skills",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "longDescription": "ClearJev adds a pre-prompt Jev judgment layer to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via TypeSafe Jev, then injects a concise routing decision (model, reasoning, planning, validation) as developer context. Code owns the workflow; Jev supplies typed judgments.",
+    "developerName": "ClearJev",
+    "category": "Productivity",
+    "defaultPrompt": [
+      "Route this task with ClearJev before implementing.",
+      "Explain the ClearJev routing decision for my last prompt."
+    ]
+  }
+}

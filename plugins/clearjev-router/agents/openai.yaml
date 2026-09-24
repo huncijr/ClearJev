@@ -1,0 +1,3 @@
+display_name: ClearJev Router
+short_description: Jev-powered pre-prompt routing for Codex tasks.
+default_prompt: Route this task with ClearJev before implementing.

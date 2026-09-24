@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+# skills-tool managed links (restore via `npx skills experimental_install`)
+agent/
+.claude/
+.agents/skills/
+# keep: .agents/plugins/marketplace.json, skills-lock.json
