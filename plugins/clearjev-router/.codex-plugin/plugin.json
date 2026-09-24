@@ -11,7 +11,7 @@
   "skills": "./skills",
   "hooks": "./hooks/hooks.json",
   "interface": {
-    "longDescription": "ClearJev adds a pre-prompt Jev judgment layer to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via TypeSafe Jev, then injects a concise routing decision (model, reasoning, planning, validation) as developer context. Code owns the workflow; Jev supplies typed judgments.",
+    "longDescription": "ClearJev adds a pre-prompt Jev judgment layer to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via the TypeSafe Jev API, then injects a concise routing decision (model, reasoning, planning, validation) as developer context. Code owns the workflow; Jev supplies typed judgments. ClearJev is an independent open-source project, not affiliated with or endorsed by TypeSafe AI, Inc. Users must provide their own TypeSafe API key.",
     "developerName": "ClearJev",
     "category": "Productivity",
     "defaultPrompt": [

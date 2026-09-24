@@ -1,6 +1,14 @@
 # ClearJev
 
-Intelligent pre-prompt routing layer for Codex, powered by **Jev** (TypeSafe System One).
+> **Trademark note:** ClearJev is an independent open-source project built on
+> the TypeSafe Jev API. It is not affiliated with, endorsed by, or sponsored
+> by TypeSafe AI, Inc. "Jev" and "TypeSafe" are trademarks of TypeSafe AI,
+> Inc. The "Jev" in ClearJev refers to this technical dependency (API calls
+> made with the user's own key), not a partnership. Users must provide their
+> own API key.
+
+Intelligent pre-prompt routing layer for Codex, built on the **TypeSafe Jev API**
+(System One judgments).
 
 Every prompt is judged **before** it reaches the model: Jev returns typed
 `Choice` / `Score` / `Noul` answers (intent, demands, risk), code composes the
