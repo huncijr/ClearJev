@@ -1,5 +1,14 @@
 # ClearJev
 
+[![Codex marketplace](https://img.shields.io/badge/Codex-marketplace-blue)](https://github.com/huncijr/ClearJev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
+> Install in one command (Codex CLI):
+> ```bash
+> codex plugin marketplace add huncijr/ClearJev
+> ```
+> then install `clearjev-router` from `/plugins`. No accounts, no verification.
+
 > **Trademark note:** ClearJev is an independent open-source project built on
 > the TypeSafe Jev API. It is not affiliated with, endorsed by, or sponsored
 > by TypeSafe AI, Inc. "Jev" and "TypeSafe" are trademarks of TypeSafe AI,
@@ -242,7 +251,7 @@ plugins/clearjev-router/
   scripts/install.sh / install.ps1 / uninstall.sh / uninstall.ps1
   assets/router-config.json      # THE config: endpoint, weights, thresholds, model profiles
   references/                    # question definitions, routing rules, model notes
-tests/test_router.py             # 63 tests, no network needed
+tests/test_router.py             # 64 tests, no network needed
 ```
 
 ## How routing works

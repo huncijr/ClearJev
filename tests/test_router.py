@@ -748,6 +748,42 @@ class TestAutoSwitch(unittest.TestCase):
 class TestPackaging(unittest.TestCase):
     ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..",
                                          "plugins", "clearjev-router"))
+    REPO = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+
+    def test_marketplace_json_is_hub_ready(self):
+        with open(os.path.join(self.REPO, ".agents", "plugins",
+                               "marketplace.json")) as f:
+            market = json.load(f)
+        self.assertTrue(market["name"])
+        self.assertTrue(market["interface"]["displayName"])
+        self.assertTrue(market["plugins"])
+        for entry in market["plugins"]:
+            self.assertTrue(entry["name"])
+            self.assertTrue(entry["category"])
+            src = entry["source"]
+            self.assertEqual(src["source"], "local")
+            self.assertTrue(src["path"].startswith("./"))
+            bundle = os.path.normpath(os.path.join(self.REPO, src["path"]))
+            for required in (".codex-plugin/plugin.json",
+                             "skills/clearjev/SKILL.md",
+                             "hooks/hooks.json",
+                             "scripts/jev_route.py",
+                             "scripts/install.sh",
+                             "scripts/uninstall.sh"):
+                self.assertTrue(os.path.isfile(os.path.join(bundle, required)),
+                                required)
+            self.assertIn(entry["policy"]["installation"],
+                          ("AVAILABLE", "INSTALLED_BY_DEFAULT", "NOT_AVAILABLE"))
+            manifest = json.load(open(os.path.join(
+                bundle, ".codex-plugin/plugin.json")))
+            for key in ("name", "version", "description", "skills", "hooks"):
+                self.assertTrue(manifest.get(key), key)
+            self.assertTrue(manifest["skills"].startswith("./"))
+            self.assertTrue(manifest["hooks"].startswith("./"))
+            iface = manifest["interface"]
+            for key in ("longDescription", "developerName", "category",
+                        "defaultPrompt"):
+                self.assertTrue(iface.get(key), key)
 
     def test_hooks_json_uses_command_windows(self):
         with open(os.path.join(self.ROOT, "hooks", "hooks.json")) as f:
