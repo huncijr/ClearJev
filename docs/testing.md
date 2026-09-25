@@ -25,8 +25,16 @@ heuristics) — what matters is that a routing block appears and is sane.
 ## Round 1 — test from Codex CLI
 
 1. Install (pick one method; try a different one in Round 3):
-   - Installer: `curl -fsSL https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.sh | sh`
+   - Installer (pipe): `curl -fsSL https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.sh | sh`
+     (key prompt reads from `/dev/tty`, safe when piped).
+   - Installer (download-first, safest on any shell): `curl -fsSL -o
+     /tmp/clearjev-install.sh <same URL above>` then `sh
+     /tmp/clearjev-install.sh`.
    - Chat: open `codex`, paste the prompt from `docs/chat-install.md`.
+   - Sanity check after install: `grep -n TYPESAFE_API_KEY ~/.bashrc` must
+     show your real key (or nothing) — never script text. If garbage got
+     saved (older installer versions), delete that line and re-export the
+     real key manually.
 2. `clearjev status` → expect `routing: ON`. `clearjev check` → `OK` with
    key, `CHECK FAILED` (fallback note) without.
 3. Restart the CLI, trust the hook in `/hooks`

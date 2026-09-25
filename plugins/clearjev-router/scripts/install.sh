@@ -111,11 +111,19 @@ case ":$PATH:" in
 esac
 
 # 6. API key.
+# NOTE: read from /dev/tty, not stdin — when installed via `curl | sh`,
+# stdin is the script itself, and a plain `read` would eat script lines
+# (breaking if/fi parsing and saving garbage as the key).
 if [ -z "${TYPESAFE_API_KEY:-}" ]; then
   echo ""
   echo "Get a Jev API key at https://console.typesafe.ai/keys"
-  printf "Paste TYPESAFE_API_KEY (Enter to skip, heuristic fallback will be used): "
-  read -r TYPESAFE_API_KEY || TYPESAFE_API_KEY=""
+  if [ -r /dev/tty ]; then
+    printf "Paste TYPESAFE_API_KEY (Enter to skip, heuristic fallback will be used): "
+    read -r TYPESAFE_API_KEY </dev/tty || TYPESAFE_API_KEY=""
+  else
+    echo "(no terminal detected — skipping key prompt, heuristic fallback will be used)"
+    TYPESAFE_API_KEY=""
+  fi
   export TYPESAFE_API_KEY
 fi
 if [ -n "${TYPESAFE_API_KEY:-}" ]; then
