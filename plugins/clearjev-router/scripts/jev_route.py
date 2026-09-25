@@ -216,22 +216,30 @@ def inferred_profile(slug, reasoning):
 
 
 def active_profiles():
-    """Merge shipped profiles with user overrides, then filter the catalog."""
-    profiles = json.loads(json.dumps(ROUTER_CONFIG["models"]))
-    overrides = user_config().get("models", {})
-    if isinstance(overrides, dict):
-        for slug, override in overrides.items():
-            if not isinstance(override, dict):
-                continue
-            if slug not in profiles:
-                profiles[slug] = inferred_profile(slug, override.get("reasoning"))
-            profiles[slug].update({k: v for k, v in override.items()
-                                   if k in ("capabilities", "cost_class", "reasoning")})
-            profiles[slug]["enabled"] = override.get("enabled", True)
+    """Build routing candidates from the live Codex catalog first.
+
+    Every visible catalog model gets a profile: the shipped curated one when
+    available, otherwise an inferred one from the slug family. User overrides
+    then enable/disable models or restrict reasoning. Nothing is hardcoded:
+    if Codex adds or renames a model, it becomes routable without a release.
+    """
+    shipped = ROUTER_CONFIG["models"]
     catalog = model_catalog()
+    overrides = user_config().get("models", {})
+    if not isinstance(overrides, dict):
+        overrides = {}
     out = {}
-    for slug, profile in profiles.items():
-        if profile.get("enabled", True) is False:
+    for slug in sorted(set(shipped) | set(catalog) | set(overrides)):
+        override = overrides.get(slug)
+        if not isinstance(override, dict):
+            override = {}
+        if slug in shipped:
+            profile = json.loads(json.dumps(shipped[slug]))
+        else:
+            profile = inferred_profile(slug, catalog.get(slug))
+        profile.update({k: v for k, v in override.items()
+                        if k in ("capabilities", "cost_class", "reasoning")})
+        if override.get("enabled", True) is False:
             continue
         if catalog and slug not in catalog:
             continue
@@ -805,8 +813,8 @@ def models_command(args):
     if action in ("list", "status"):
         active = active_profiles()
         print("ClearJev models")
-        for slug in sorted(set(ROUTER_CONFIG["models"]) | set(
-                user_config().get("models", {}))):
+        for slug in sorted(set(ROUTER_CONFIG["models"]) | set(catalog)
+                           | set(user_config().get("models", {}))):
             if slug in active:
                 print("- %s: enabled [%s]" % (
                     slug, ",".join(active[slug]["reasoning"])))

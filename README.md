@@ -59,7 +59,16 @@ write prompts.
 ### 1. Codex CLI chat
 
 After install and restart, the `$clearjev` skill is invokable in chat.
-Always add the action — a bare `$clearjev` only gets you a numbered menu:
+Just describe what you want in plain language, in any language — the skill
+acts immediately without a menu:
+
+```
+$clearjev kapcsold ki a routingot
+$clearjev add hozzá a gpt-6-sol modellt
+$clearjev mi a státusz
+```
+
+Explicit commands work too (and are the safest form in scripts):
 
 ```
 $clearjev status
@@ -75,6 +84,9 @@ $clearjev key status
 $clearjev key set '<paste-key-here>'
 $clearjev run 'Implement Stripe subscriptions with webhooks'
 ```
+
+A bare `$clearjev` (or a garbled request) returns a numbered
+on/off/status/key/models/run menu as a fallback.
 
 Deprecated-but-working CLI/IDE aliases (installed as `~/.codex/prompts/*.md`).
 These are the one-Enter on/off switches — one action per command, no menu:
@@ -140,9 +152,11 @@ Precedence: `CLEARJEV_ENABLED` env > config file (`~/.codex/clearjev/config.json
 ## Model management
 
 `clearjev models available` lists the models in your local Codex catalog
-(`~/.codex/models_cache.json`) — only these can ever be recommended. Shipped
-profiles: `gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`,
-`gpt-5.5` (see `assets/router-config.json`, the single source of truth —
+(`~/.codex/models_cache.json`) — only these can ever be recommended. The
+shipped `assets/router-config.json` holds curated profiles for known models,
+but the router is catalog-first: **any** visible catalog model is routable,
+with an inferred capability profile when no curated one exists (see
+`assets/router-config.json`, the single source of truth for curated values —
 the router loads it at startup).
 
 - `add` validates the slug against your catalog and filters reasoning levels

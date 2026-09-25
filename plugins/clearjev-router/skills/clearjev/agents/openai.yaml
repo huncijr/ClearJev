@@ -3,4 +3,6 @@ interface:
   short_description: Control Jev routing, models, reasoning, and API access.
   default_prompt: Show ClearJev status and available actions.
 policy:
-  allow_implicit_invocation: false
+  # Implicit invocation is limited to routing-control intents (on/off,
+  # status, key, models, run). Coding tasks never trigger this skill.
+  allow_implicit_invocation: true

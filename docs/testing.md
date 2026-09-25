@@ -45,8 +45,9 @@ recommends, it never switches the session model by itself.
 4. Send T1–T5 (one per message). Each answer should be preceded by the
    `ClearJev routing` status and a routing block. With a key the block
    header says `· jev`; without, `· heuristic fallback · <reason>`.
-5. Exercise the switch — all from chat, no terminal needed:
-   - `$clearjev off` → next prompt: **no** routing status.
+5. Exercise the switch — all from chat, no terminal needed. Plain language
+   works; explicit commands are shown in parentheses:
+   - `$clearjev off` (`kapcsold ki a routingot`) → next prompt: **no** routing status.
    - `$clearjev on` → next prompt: routing block is back.
    - `$clearjev status` → state, key presence, model counts.
    - `$clearjev models list` / `$clearjev models available`.
@@ -101,7 +102,7 @@ before a release:
 1. **Direct hook call (no Codex at all)** — fastest iteration:
    `echo '{"prompt":"...","cwd":"."}' | python3
    plugins/clearjev-router/scripts/jev_route.py`
-2. **Unit tests** — `python3 -m unittest discover -s tests -v` (32 tests,
+2. **Unit tests** — `python3 -m unittest discover -s tests -v` (36 tests,
    no network, hermetic state/catalog/credentials via temp dirs).
 3. **`clearjev status` / `clearjev check`** — on/off state, key presence,
    model counts, live Jev ping + fallback smoke test.
@@ -129,4 +130,4 @@ before a release:
 - `--check` is `OK` with a valid key and honestly reports fallback without one.
 - Uninstall leaves no trace: no status line, no block, no `clearjev` binary
   (key+state gone only with `--purge`/`-Purge`).
-- Unit suite stays 32/32 green after any change.
+- Unit suite stays 36/36 green after any change.

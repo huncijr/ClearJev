@@ -295,6 +295,57 @@ class TestModels(unittest.TestCase):
         self.assertIn("gpt-6-astra", ctx)
 
 
+class TestDynamicCatalog(unittest.TestCase):
+    """The live catalog — not hardcoded slugs — defines routing candidates."""
+
+    def _catalog(self, models):
+        import tempfile as _tf
+        tmp = _tf.mkdtemp(prefix="clearjev-dyncat-")
+        path = os.path.join(tmp, "models.json")
+        with open(path, "w") as f:
+            json.dump({"models": [
+                {"slug": slug, "visibility": "list",
+                 "supported_reasoning_levels": [{"effort": e} for e in eff]}
+                for slug, eff in models]}, f)
+        config = os.path.join(tmp, "config.json")
+        return {"CLEARJEV_MODELS_CACHE": path, "CLEARJEV_CONFIG": config,
+                "CLEARJEV_STATE": config,
+                "CLEARJEV_CREDENTIALS": os.path.join(tmp, "creds.json")}
+
+    def test_unknown_catalog_models_are_routable(self):
+        base = self._catalog([
+            ("gpt-9-mythic", ["low", "medium", "high"]),
+            ("gpt-9-tiny", ["low", "medium"])])
+        proc = run_hook({"prompt": "Explain dependency injection.",
+                         "cwd": "/tmp"}, base)
+        outer = json.loads(proc.stdout)
+        ctx = outer["hookSpecificOutput"]["additionalContext"]
+        self.assertTrue("gpt-9-mythic" in ctx or "gpt-9-tiny" in ctx,
+                        "catalog models must be routable without profiles: " + ctx)
+
+    def test_list_shows_unprofiled_catalog_models(self):
+        base = self._catalog([("gpt-9-mythic", ["low", "medium", "high"])])
+        proc, _ = run_cli("models", "list", env_extra=base)
+        self.assertIn("gpt-9-mythic: enabled [low,medium,high]", proc.stdout)
+
+    def test_add_unprofiled_catalog_model(self):
+        base = self._catalog([("gpt-9-mythic", ["low", "medium"])])
+        proc, _ = run_cli("models", "add", "gpt-9-mythic",
+                          "--reasoning", "low", env_extra=base)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("gpt-9-mythic [low]", proc.stdout)
+
+    def test_shipped_models_unavailable_in_catalog(self):
+        base = self._catalog([("gpt-9-mythic", ["low", "medium", "high"])])
+        proc = run_hook({"prompt": "Implement Stripe subscriptions with "
+                                   "webhooks and access control.",
+                         "cwd": "/tmp"}, base)
+        outer = json.loads(proc.stdout)
+        ctx = outer["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("gpt-9-mythic", ctx)
+        self.assertNotIn("gpt-5.6-sol", ctx)
+
+
 class TestRunCommand(unittest.TestCase):
     def test_run_dry_run_selects_real_model(self):
         proc, _ = run_cli("run", "--dry-run",
@@ -325,8 +376,9 @@ class TestPackaging(unittest.TestCase):
                                "SKILL.md")) as f:
             text = f.read()
         self.assertIn("name: clearjev", text[:400])
-        # No-action menu: mandatory numbered on/off menu at the top.
-        self.assertIn("No-action menu (mandatory)", text)
+        # Act-first behavior with menu only as fallback.
+        self.assertIn("Act first (default)", text)
+        self.assertIn("Fallback menu (only for empty or garbled messages)", text)
         for item in ("1. on", "2. off", "3. status", "4. key",
                      "5. models", "6. run"):
             self.assertIn(item, text)

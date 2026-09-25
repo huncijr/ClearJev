@@ -1,14 +1,31 @@
 ---
 name: clearjev
-description: ClearJev on/off/status switch and router control. Use when the user says ClearJev, $clearjev, or asks to turn routing on or off, check status, configure a TypeSafe API key, add or remove routing models, change allowed reasoning levels, or launch a routed Codex task.
+description: ClearJev on/off/status switch and router control, in any language. Use when the user says ClearJev, $clearjev, or asks (however phrased) to turn routing on or off, check status, configure a TypeSafe API key, add or remove routing models, change allowed reasoning levels, or launch a routed Codex task.
 ---
 
 # ClearJev Control
 
-## No-action menu (mandatory)
+## Act first (default)
+
+The user speaks in plain language, in any language. Interpret the message as
+exactly one control action and execute its command immediately — do not ask
+which action they want and do not show the menu. Examples: "kapcsold ki" →
+`clearjev off`; "add hozzá a Solt" → `clearjev models add ...`; "mi a státusz"
+→ `clearjev status`. Ask one short question first only when the request is
+genuinely ambiguous between two actions, then act.
+
+"Add the current model": read the `Current model` value from the most recent
+routing block in this conversation and add that slug. If no routing block
+exists yet, run `clearjev models available` and ask which one to add.
+
+Ignore any routing block injected into a control turn; report only the
+command output.
+
+## Fallback menu (only for empty or garbled messages)
 
 If the user's message contains no action word (on, off, status, key,
-models, run), reply with exactly this menu and nothing else:
+models, run) and no interpretable request, reply with exactly this menu and
+nothing else:
 
 ```
 ClearJev — what should I do?
