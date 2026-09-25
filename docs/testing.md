@@ -84,22 +84,15 @@ Verify: new session → send T3 → **no** `ClearJev routing` status, and
 `clearjev` is `command not found`. Without `--purge`, key and routing state
 are preserved for reinstall.
 
-## Round 3 — re-download and retest in the Codex App
+## Round 3 — verify silence in the Codex App
 
-1. Reinstall using a **different** method than Round 1 (e.g. chat prompt if
-   Round 1 was the installer, or `codex plugin marketplace add
-   huncijr/ClearJev` + install from the Plugins tab).
-2. Marketplace installs need manual completion on the same machine (the
-   marketplace cannot collect secrets or install the shell CLI): run the
-   shell installer once to get the runtime + `clearjev` CLI, save the key
-   with `clearjev key set '...'` (or `$clearjev key set '...'` in chat);
-   then restart the App, approve the hook, open a **new chat**.
-3. Send T1–T5 again, compare routing blocks with Round 1 (same intents,
-   same model families expected).
-4. In-App behavior check: `@ClearJev off` → the skill refuses with the
-   CLI-only message (expected). Plain `clearjev off` message → hook executes
-   it, next prompt has no routing block; `clearjev on` restores it. Routing
-   blocks stay advisory (`Switch unavailable in this host`).
+ClearJev is CLI-only: the App must show no routing activity at all.
+
+1. In the Desktop App, open a **new chat** (with the plugin installed or
+   not — either way the hook stays silent on non-CLI hosts).
+2. Send T1 and T3 → **no** `ClearJev routing` status, no block.
+3. Plain `clearjev off` message → short CLI-only pointer (no shell, no
+   cost). `@ClearJev ...` → the skill refuses (CLI-only).
 
 ## Methods to exercise the skill (agent-testing toolbox)
 
@@ -129,7 +122,7 @@ before a release:
 
 ## What counts as PASS
 
-- Routing block appears for T1–T5 in both CLI and App, intents correct,
+- Routing block appears for T1–T5 in CLI, intents correct,
   models from the local catalog.
 - `off` silences it (zero Jev calls), `on` restores it, `noroute:` and
   `reroute:` each skip once.

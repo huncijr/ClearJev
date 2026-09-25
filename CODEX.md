@@ -36,10 +36,10 @@ Treat fallback output as a rough hint, not a confident judgment.
   previous model: continue with that model, say so in one short line, and
   offer `/model` or `clearjev run '<prompt>'` for a guaranteed routed
   session.
-- If the block says `Switch unavailable in this host`, the thread is not
-  visible to the reachable app-server (typical in the Desktop App, which
-  runs its own private server): treat the recommendation as advisory and
-  switch natively with `/model`.
+- `Switch unavailable in this host` appears only where the thread is not
+  visible to the reachable app-server: treat the recommendation as advisory
+  and switch natively with `/model`. (Non-CLI hosts such as the Desktop
+  App stay silent before ever reaching this point.)
 - `Repo:` tells you how much context to load: `unnecessary` (prompt only) →
   `targeted` (1–3 files) → `broad` (subsystem) → `deep` (progressive scan,
   stop as soon as sufficient). Never dump the whole repo by default.

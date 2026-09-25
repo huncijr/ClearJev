@@ -376,6 +376,40 @@ def switch_decision(model="gpt-5.6-luna", current="gpt-5.6-sol"):
             "current_model": current}
 
 
+class TestHostScope(unittest.TestCase):
+    """ClearJev routes in Codex CLI only; App hosts stay silent (zero cost)."""
+
+    def test_cli_by_default(self):
+        # default env (no originator var) routes
+        proc = run_hook({"prompt": "Explain dependency injection.", "cwd": "/tmp"},
+                        {"CODEX_INTERNAL_ORIGINATOR_OVERRIDE": "",
+                         "CLEARJEV_FORCE_HOST": ""})
+        self.assertIn("additionalContext", proc.stdout)
+
+    def test_app_host_stays_silent(self):
+        proc = run_hook({"prompt": "Explain dependency injection.", "cwd": "/tmp"},
+                        {"CODEX_INTERNAL_ORIGINATOR_OVERRIDE": "Codex Desktop"})
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout, "")
+
+    def test_app_control_gets_cli_only_pointer(self):
+        proc = run_hook({"prompt": "clearjev off", "cwd": "/tmp"},
+                        {"CODEX_INTERNAL_ORIGINATOR_OVERRIDE": "Codex Desktop"})
+        ctx = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("CLI-only", ctx)
+        self.assertNotIn("routing OFF", ctx)
+
+    def test_force_host_override(self):
+        proc = run_hook({"prompt": "Explain dependency injection.", "cwd": "/tmp"},
+                        {"CODEX_INTERNAL_ORIGINATOR_OVERRIDE": "Codex Desktop",
+                         "CLEARJEV_FORCE_HOST": "cli"})
+        self.assertIn("additionalContext", proc.stdout)
+
+    def test_status_shows_host(self):
+        proc, _ = run_cli("status")
+        self.assertIn("- host: CLI", proc.stdout)
+
+
 class TestChatControl(unittest.TestCase):
     """Hook-side on/off/status: exact prompts only, no shell needed."""
 

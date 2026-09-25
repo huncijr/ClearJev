@@ -91,11 +91,12 @@ $clearjev run 'Implement Stripe subscriptions with webhooks'
 A bare `$clearjev` (or a garbled request) returns a numbered
 on/off/status/key/models/run menu as a fallback.
 
-No-shell control (works even where the agent sandbox blocks shell commands,
-e.g. Desktop App bubblewrap): type `clearjev on`, `clearjev off`, or
-`clearjev status` as a plain message. The hook executes it itself and the
-agent reports the result — no approval, no shell. Exact match only, so
-discussing ClearJev never toggles anything.
+No-shell control (Codex CLI): where the agent cannot or should not run
+shell commands, type `clearjev on`, `clearjev off`, or `clearjev status` as
+a plain message. The hook executes it itself and the agent reports the
+result — no approval, no shell. Exact match only, so discussing ClearJev
+never toggles anything. (In the App these messages answer with a short
+CLI-only pointer instead.)
 
 Deprecated-but-working CLI/IDE aliases (installed as `~/.codex/prompts/*.md`).
 These are the one-Enter on/off switches — one action per command, no menu:
@@ -113,19 +114,17 @@ Note: chat setup types the key into chat history. Prefer the terminal
 (`clearjev key set '...'`); if you use chat, the skill warns once and never
 prints the key back.
 
-### 2. Codex App chat (advisory routing only)
+### 2. Codex App chat (ClearJev stays off)
 
-Install via the Plugins tab (`clearjev-router` from the ClearJev
-marketplace), or run the shell installer on the same machine. The hook keeps
-routing and recommending there, but the **`@ClearJev` skill refuses control
-actions in the App — it is CLI-only** (the App thread is invisible to the
-reachable app-server and its sandbox may block shell commands, so every
-shell-backed action would fail). In the App:
+Do not install the plugin in the App: the hook detects non-CLI hosts and
+stays completely silent there — no Jev calls, no routing blocks, no usage
+spent. The **`@ClearJev` skill refuses control actions in the App — it is
+CLI-only.** In the App:
 
-- Follow recommendations with native `/model`.
-- Plain `clearjev on`, `clearjev off`, `clearjev status` messages still work
-  (the hook executes those itself, no shell needed).
-- Full control lives in Codex CLI.
+- No recommendations, no switching attempts — use the App natively.
+- Plain `clearjev on|off|status` messages answer with a short CLI-only
+  pointer (no shell needed, no cost).
+- Full routing and control live in Codex CLI.
 
 Manual key step for marketplace installs (the marketplace cannot collect
 secrets): run `clearjev key set '...'` once in a terminal on the same
@@ -187,7 +186,7 @@ the router loads it at startup).
 | Switch confirmed | Block says `Switched this session to <model> (<effort>)` |
 | Already the right model | Block says `Already on <model>; no switch needed` |
 | Switch rejected/unavailable | Block says `Switch failed (<reason>)` or `Switch unavailable in this host`; session continues with its previous model |
-| Desktop App thread not visible locally | The App runs its own private app-server, so the hook stays advisory there: follow the recommendation with native `/model` |
+| Desktop App / non-CLI host | The hook stays completely silent there: no Jev calls, no blocks, no usage spent |
 | Already-generating turn | Cannot be re-targeted mid-stream; the switch applies from that point on |
 | `clearjev autoswitch off` / `off` | No switching; hook stays advisory-only |
 | New CLI session with Jev's pick | `clearjev run '<prompt>'` (routes, then `codex --model <slug> -c model_reasoning_effort=<level>`) |

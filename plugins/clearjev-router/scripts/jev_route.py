@@ -745,6 +745,8 @@ def status():
     disabled, reason = is_disabled()
     key = get_api_key()
     print("ClearJev status")
+    print("- host: " + ("CLI" if is_cli_host()
+                        else "non-CLI (" + host_origin() + ") — routing disabled here"))
     print("- routing: " + ("OFF (" + reason + ")" if disabled else "ON"))
     print("- auto-switch: " + ("ON" if auto_switch_enabled() else "OFF"))
     print("- switch endpoint: " + app_server_sock())
@@ -755,6 +757,30 @@ def status():
     demo = heuristic_route("Add a dark mode toggle to the settings page.", {})
     print("- fallback smoke: %s/%.0f/%s" % (demo["intent"], demo["complexity"], demo["model"]))
     return 0
+
+
+# ---------------------------------------------------------------- host detection
+#
+# ClearJev routes in Codex CLI only. The Desktop App runs its own private
+# app-server (threads invisible here, switching impossible) and its sandbox
+# may block shell commands, so every hook run there would only burn Jev
+# calls and context. Detection is environment-based: hooks inherit the
+# spawning app-server's environment, and the App server marks itself with
+# CODEX_INTERNAL_ORIGINATOR_OVERRIDE=Codex Desktop (the CLI daemon sets no
+# such variable).
+
+def host_origin():
+    return (os.environ.get("CODEX_INTERNAL_ORIGINATOR_OVERRIDE") or "").strip()
+
+
+def is_cli_host():
+    """True only on a host where routing is allowed (Codex CLI)."""
+    if os.environ.get("CLEARJEV_FORCE_HOST"):
+        return os.environ["CLEARJEV_FORCE_HOST"].strip().lower() == "cli"
+    origin = host_origin().lower()
+    if not origin:
+        return True
+    return origin in ("cli", "codex cli", "codex-cli", "terminal")
 
 
 # ---------------------------------------------------------------- in-chat control
@@ -1296,9 +1322,15 @@ def main(argv):
     # `clearjev on`). Exact match only, so discussing ClearJev never toggles.
     control = chat_control_command(prompt)
     if control is not None:
-        emit("ClearJev control result (report this to the user, briefly):\n"
-             + control)
+        if not is_cli_host():
+            emit("ClearJev is CLI-only here: routing stays off in this host. "
+                 "Use Codex CLI for routing and control.")
+        else:
+            emit("ClearJev control result (report this to the user, briefly):\n"
+                 + control)
         return 0
+    if not is_cli_host():
+        return 0  # non-CLI host (e.g. Desktop App): silent, zero cost
     if disabled:
         return 0  # paused: silent no-op, zero cost
     if prompt.lstrip().lower().startswith("noroute:"):

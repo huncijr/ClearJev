@@ -62,7 +62,7 @@ clearjev key set 'THE_KEY'
 ```
 
 Only if the user explicitly asks for chat setup: `$clearjev key set '...'`
-(or `@ClearJev` in the App), warn once that chat history retains the key,
+(CLI only), warn once that chat history retains the key,
 and never print the key back. Without a key the layer works in labeled
 heuristic-fallback mode.
 
@@ -97,15 +97,11 @@ plain message — the hook executes it itself.
 ## 7. CLI vs App differences
 
 - CLI: automatic switching works through the local app-server daemon.
-- Desktop App: the App runs its own app-server over private pipes with no
-  socket on disk, so its threads answer `thread not found` on the local
-  daemon. The hook detects this and reports
-  `Switch unavailable in this host ... use /model` instead of a bogus
-  failure: follow the recommendation with native `/model`.
-  `clearjev run '<prompt>'` (CLI) remains the guaranteed pre-routed path.
-  The App agent sandbox (bubblewrap) may also block shell commands entirely;
-  then control ClearJev with plain `clearjev on` / `clearjev off` /
-  `clearjev status` messages — the hook executes those itself.
+- Desktop App: do not install or enable the plugin there. The hook
+  detects non-CLI hosts and stays completely silent — no Jev calls, no
+  routing blocks, no usage spent. Plain `clearjev on|off|status` messages
+  answer with a short CLI-only pointer. `clearjev run '<prompt>'` (CLI)
+  remains the guaranteed pre-routed path.
 
 ## 8. If it does not work (check in order)
 
