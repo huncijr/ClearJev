@@ -1,0 +1,6 @@
+interface:
+  display_name: ClearJev
+  short_description: Control Jev routing, models, reasoning, and API access.
+  default_prompt: Show ClearJev status and available actions.
+policy:
+  allow_implicit_invocation: false

@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "python3 \"${PLUGIN_ROOT}/scripts/jev_route.py\"",
-            "command_windows": "py -3 \"%PLUGIN_ROOT%\\scripts\\jev_route.py\"",
+            "commandWindows": "py -3 \"%PLUGIN_ROOT%\\scripts\\jev_route.py\"",
             "timeout": 12,
             "statusMessage": "ClearJev routing",
             "additionalContextLimit": 2000

@@ -3,9 +3,9 @@
 ## On/off precedence (checked first, before any Jev call)
 
 1. `CLEARJEV_ENABLED` env (`0/false/no/off` = paused; `1/true/yes/on` = forced on).
-2. State file: `$CLEARJEV_STATE` > `$PLUGIN_DATA/state.json` > `~/.codex/clearjev.json`
+2. State file: `$CLEARJEV_CONFIG` > `$CLEARJEV_STATE` > `~/.codex/clearjev/config.json`
    (`{"enabled": false}` = paused; managed by `clearjev on/off`).
-3. Default: ON. Prompt prefix `noroute:` skips routing for one prompt.
+3. Default: ON. Prompt prefixes `noroute:` and `reroute:` skip routing for one prompt.
 Paused = silent no-op (exit 0, empty stdout, no Jev call, zero cost).
 
 ## Complexity 0–100 (composite scoring, in code)
@@ -33,24 +33,28 @@ Bands: 0–20 trivial · 20–40 simple · 40–60 moderate · 60–75 complex �
 
 ```
 score(model, task) =
-    capabilityFit(model, demands)   # dot product vs profiles in router-config.yaml
-  + contextFit(model, repo_demand)
-  - 8 * costClass                   # simple_tasks policy raises this penalty
-  + policyBonus                     # e.g. documentation -> Luna, debug -> Sol, security floor -> Sol+
+    capabilityFit(model, demands)   # dot product vs profiles in router-config.json
+  + explanationBonus                  # explain/question/documentation -> cheapest strong explainer
+  - 8 * costClass                   # cheap tasks raise this penalty
+  + policyBonus                     # e.g. debug -> Sol-family, security floor -> reasoning>=8
 ```
 
-Smallest model that reliably solves the task wins. Policies from
-`assets/router-config.yaml` are hard floors (security, architecture), never suggestions.
+Smallest model that reliably solves the task wins, chosen only from models
+that are enabled and present in the user's Codex model catalog. Policies from
+`assets/router-config.json` are hard floors (security, architecture), never suggestions.
 
 ## Reasoning / planning / validation mapping
 
+Reasoning uses only values the Codex model catalog supports
+(`low, medium, high, xhigh, max, ultra`), filtered per model:
+
 | complexity | reasoning | planning | validation |
 |---|---|---|---|
-| 0–20 | low | none | none/basic |
-| 20–40 | low/medium | light | basic |
-| 40–60 | medium | standard | tests |
-| 60–75 | high | deep | deep |
-| 75–100 | high/very_high | deep/multi_phase | deep/full_regression |
+| 0–30 | low | none | none/basic |
+| 30–60 | medium | light/standard | basic/tests |
+| 60–80 | high | deep | deep |
+| 80–95 | xhigh | deep/multi_phase | deep/full_regression |
+| 95–100 | max | multi_phase | full_regression |
 
 `security_sensitive >= 0.7` forces reasoning ≥ high regardless of band.
 
@@ -62,8 +66,10 @@ confidence drop on re-judgment. Action: fresh Jev call with updated state
 (error output included) → next-best capability fit, usually one cost class up.
 Never retry more than twice with the same model+plan.
 
-## Multi-phase tasks
+## Multi-model tasks
 
 `planning == multi_phase`: split into phases (analyze → plan → implement →
-test → validate); each phase gets its own routing decision. Cheap phases
-(docs, simple UI) may use Luna/Terra inside a Sol-led workflow.
+test → validate) across separate Codex sessions. Cheap phases (docs, simple
+UI) may use Luna-class models inside a Sol-led workflow. A plugin or hook
+cannot change the model of an already-running session; switch it natively
+with `/model` or start the next phase with `clearjev run '<prompt>'`.

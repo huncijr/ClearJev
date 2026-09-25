@@ -1,22 +1,13 @@
 #!/bin/sh
-# ClearJev one-command installer — macOS / Linux.
-#   curl -fsSL https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.sh | sh
-# What it does:
-#   1. Gets the plugin (local repo if present, else downloads the tarball).
-#   2. Copies the skill to $CODEX_HOME/skills + $HOME/.agents/skills.
-#   3. Registers the UserPromptSubmit hook in ~/.codex/hooks.json (merged, never overwritten).
-#   4. Enables skills+hooks in ~/.codex/config.toml.
-#   5. Asks for TYPESAFE_API_KEY (https://console.typesafe.ai/keys).
+# ClearJev installer for macOS and Linux.
 set -eu
 
 REPO="huncijr/ClearJev"
 SRC=""
 TMP=""
-
 cleanup() { [ -n "$TMP" ] && [ -d "$TMP" ] && rm -rf "$TMP"; }
 trap cleanup EXIT
 
-# 1. Locate or download the plugin source.
 if [ -f "plugins/clearjev-router/.codex-plugin/plugin.json" ]; then
   SRC="plugins/clearjev-router"
 elif [ -n "${PLUGIN_SRC:-}" ] && [ -f "$PLUGIN_SRC/.codex-plugin/plugin.json" ]; then
@@ -30,117 +21,85 @@ else
 fi
 
 command -v python3 >/dev/null || { echo "error: python3 is required" >&2; exit 1; }
-
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-SKILL1="$CODEX_HOME/skills/clearjev-router"
-SKILL2="$HOME/.agents/skills/clearjev-router"
+RUNTIME="$CODEX_HOME/clearjev-runtime"
+SKILL1="$CODEX_HOME/skills/clearjev"
+SKILL2="$HOME/.agents/skills/clearjev"
+PROMPTS="$CODEX_HOME/prompts"
+BIN="$HOME/.local/bin"
 
-# 2. Install the skill in both discovery roots (harmless duplicates).
+mkdir -p "$CODEX_HOME" "$BIN" "$PROMPTS"
+rm -rf "$RUNTIME"
+cp -R "$SRC" "$RUNTIME"
+echo "runtime -> $RUNTIME"
+
 for dest in "$SKILL1" "$SKILL2"; do
   mkdir -p "$(dirname "$dest")"
   rm -rf "$dest"
-  cp -R "$SRC" "$dest"
+  cp -R "$RUNTIME/skills/clearjev" "$dest"
   echo "skill -> $dest"
 done
-HOOK_CMD="python3 \"$SKILL1/scripts/jev_route.py\""
 
-# 3+4. Merge hook + features via python3 (safe JSON/TOML handling).
-HOOK_CMD="$HOOK_CMD" CODEX_HOME="$CODEX_HOME" python3 - <<'EOF'
-import json, os
-home = os.path.expanduser("~")
-codex_home = os.environ.get("CODEX_HOME", os.path.join(home, ".codex"))
-hook_cmd = os.environ["HOOK_CMD"]
-os.makedirs(codex_home, exist_ok=True)
+cp -f "$RUNTIME/scripts/clearjev" "$BIN/clearjev"
+chmod +x "$BIN/clearjev"
+for prompt in "$RUNTIME"/prompts/*.md; do cp -f "$prompt" "$PROMPTS/$(basename "$prompt")"; done
+echo "chat prompts -> $PROMPTS"
 
-# hooks.json merge
-hp = os.path.join(codex_home, "hooks.json")
-try:
-    with open(hp) as f:
-        data = json.load(f)
-except (OSError, ValueError):
+HOOK_CMD="python3 \"$RUNTIME/scripts/jev_route.py\""
+HOOK_CMD="$HOOK_CMD" CODEX_HOME="$CODEX_HOME" python3 - <<'PY'
+import json, os, shutil
+codex_home = os.environ["CODEX_HOME"]
+path = os.path.join(codex_home, "hooks.json")
+if os.path.exists(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise SystemExit("error: existing hooks.json is invalid; not modified: " + str(exc))
+    shutil.copy2(path, path + ".clearjev.bak")
+else:
     data = {}
 hooks = data.setdefault("hooks", {})
 groups = hooks.setdefault("UserPromptSubmit", [])
-entry = {"type": "command", "command": hook_cmd, "timeout": 12,
+entry = {"type": "command", "command": os.environ["HOOK_CMD"], "timeout": 12,
          "statusMessage": "ClearJev routing", "additionalContextLimit": 2000}
-holder = None
-for g in groups:
-    for h in g.get("hooks", []):
-        if "jev_route.py" in h.get("command", ""):
-            h.update(entry)
-            holder = True
-if not holder:
+found = False
+for group in groups:
+    for hook in group.get("hooks", []):
+        command = hook.get("command", "")
+        if "clearjev-runtime" in command or "clearjev-router/scripts/jev_route.py" in command:
+            hook.clear()
+            hook.update(entry)
+            found = True
+if not found:
     groups.append({"hooks": [entry]})
-with open(hp, "w") as f:
+with open(path, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
-print("hooks -> " + hp)
+    f.write("\n")
+print("hook -> " + path)
+PY
 
-# config.toml features
-cp = os.path.join(codex_home, "config.toml")
-text = ""
-try:
-    with open(cp) as f:
-        text = f.read()
-except OSError:
-    text = ""
-need = []
-if "skills" not in text:
-    need.append("skills = true")
-if "hooks" not in text and "codex_hooks" not in text:
-    need.append("hooks = true")
-if need:
-    if "[features]" not in text:
-        text = text.rstrip() + "\n\n[features]\n" if text.strip() else "[features]\n"
-    text = text.rstrip() + "\n" + "\n".join(need) + "\n"
-    with open(cp, "w") as f:
-        f.write(text)
-    print("config -> " + cp)
-else:
-    print("config already enables skills+hooks")
-EOF
-
-# 5. `clearjev` CLI on PATH (on/off/status without touching config files).
-BIN="$HOME/.local/bin"
-mkdir -p "$BIN"
-cp -f "$SKILL1/scripts/clearjev" "$BIN/clearjev"
-chmod +x "$BIN/clearjev"
-echo "cli -> $BIN/clearjev"
-case ":$PATH:" in
-  *":$BIN:"*) ;;
-  *) echo "NOTE: add to PATH (e.g. export PATH=\"\$HOME/.local/bin:\$PATH\") to use 'clearjev on|off|status'." ;;
-esac
-
-# 6. API key.
-# NOTE: read from /dev/tty, not stdin — when installed via `curl | sh`,
-# stdin is the script itself, and a plain `read` would eat script lines
-# (breaking if/fi parsing and saving garbage as the key).
-if [ -z "${TYPESAFE_API_KEY:-}" ]; then
+if [ -z "${TYPESAFE_API_KEY:-}" ] && [ -r /dev/tty ]; then
   echo ""
-  echo "Get a Jev API key at https://console.typesafe.ai/keys"
-  if [ -r /dev/tty ]; then
-    printf "Paste TYPESAFE_API_KEY (Enter to skip, heuristic fallback will be used): "
-    read -r TYPESAFE_API_KEY </dev/tty || TYPESAFE_API_KEY=""
-  else
-    echo "(no terminal detected — skipping key prompt, heuristic fallback will be used)"
-    TYPESAFE_API_KEY=""
-  fi
-  export TYPESAFE_API_KEY
+  echo "ClearJev sends prompt text and limited repository metadata to TypeSafe when Jev is enabled."
+  echo "Get a key at https://console.typesafe.ai/keys, or press Enter for local heuristic fallback."
+  printf "TYPESAFE_API_KEY: "
+  stty -echo </dev/tty 2>/dev/null || true
+  read -r TYPESAFE_API_KEY </dev/tty || TYPESAFE_API_KEY=""
+  stty echo </dev/tty 2>/dev/null || true
+  echo ""
 fi
 if [ -n "${TYPESAFE_API_KEY:-}" ]; then
-  RC="$HOME/.bashrc"
-  [ -n "${ZSH_VERSION:-}" ] && RC="$HOME/.zshrc"
-  [ -f "$HOME/.zshrc" ] && RC="$HOME/.zshrc"
-  if ! grep -qs "TYPESAFE_API_KEY" "$RC" 2>/dev/null; then
-    printf '\nexport TYPESAFE_API_KEY="%s"\n' "$TYPESAFE_API_KEY" >> "$RC"
-    echo "key saved to $RC"
-  fi
+  export TYPESAFE_API_KEY
+  python3 "$RUNTIME/scripts/jev_route.py" key import-env
 else
-  echo "No key set — continuing with heuristic fallback."
+  echo "No key saved; heuristic fallback remains available."
 fi
 
 echo ""
-python3 "$SKILL1/scripts/jev_route.py" --check || true
+python3 "$RUNTIME/scripts/jev_route.py" status
 echo ""
-echo "Done. Restart Codex (CLI/App), review the hook once in /hooks, then just write prompts."
-echo "The Jev layer routes every prompt automatically before execution."
-echo "Pause anytime: clearjev off | resume: clearjev on | status: clearjev status"
+echo "Installed. Restart Codex, trust ClearJev in /hooks, then open a new chat."
+echo "Chat: use \$clearjev with on/off/status/models/key actions."
+echo "Deprecated aliases: /prompts:clearjev, /prompts:clearjev-on, /prompts:clearjev-off."
+echo "Shell: $BIN/clearjev status"

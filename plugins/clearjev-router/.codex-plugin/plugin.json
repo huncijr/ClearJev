@@ -1,7 +1,7 @@
 {
   "name": "clearjev-router",
-  "version": "0.1.0",
-  "description": "Intelligent model routing layer for Codex: Jev (TypeSafe System One) judges every prompt before execution and injects model/reasoning/planning guidance.",
+  "version": "0.2.0",
+  "description": "Advisory pre-prompt routing for Codex: Jev (TypeSafe System One) judges every prompt and recommends a real Codex model plus reasoning effort. Chat control via $clearjev; pre-routed CLI sessions via `clearjev run`.",
   "author": {
     "name": "ClearJev"
   },
@@ -11,13 +11,13 @@
   "skills": "./skills",
   "hooks": "./hooks/hooks.json",
   "interface": {
-    "longDescription": "ClearJev adds a pre-prompt Jev judgment layer to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via the TypeSafe Jev API, then injects a concise routing decision (model, reasoning, planning, validation) as developer context. Code owns the workflow; Jev supplies typed judgments. ClearJev is an independent open-source project, not affiliated with or endorsed by TypeSafe AI, Inc. Users must provide their own TypeSafe API key.",
+    "longDescription": "ClearJev adds an advisory Jev judgment layer to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via the TypeSafe Jev API, then injects a concise recommendation (model, reasoning, planning, validation) as developer context. The hook cannot change the active session model: switch it natively with /model, or start a pre-routed CLI session with `clearjev run`. Manage routing from chat with the $clearjev skill (on/off/status/models/key). ClearJev is an independent open-source project, not affiliated with or endorsed by TypeSafe AI, Inc. Users must provide their own TypeSafe API key.",
     "developerName": "ClearJev",
     "category": "Productivity",
     "defaultPrompt": [
-      "Route this task with ClearJev before implementing.",
-      "Explain the ClearJev routing decision for my last prompt.",
-      "Pause ClearJev routing for now."
+      "Show ClearJev status and available actions.",
+      "Turn ClearJev routing off for now.",
+      "List the models ClearJev can route to."
     ]
   }
 }

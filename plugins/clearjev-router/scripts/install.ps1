@@ -1,12 +1,13 @@
-# ClearJev one-command installer — Windows (PowerShell).
-#   irm https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.ps1 | iex
+# ClearJev installer for Windows PowerShell 5.1+.
 $ErrorActionPreference = "Stop"
 $Repo = "huncijr/ClearJev"
 
-# 1. Locate or download the plugin source.
 $Src = $null
-foreach ($cand in @("plugins/clearjev-router", $env:PLUGIN_SRC)) {
-  if ($cand -and (Test-Path (Join-Path $cand ".codex-plugin/plugin.json"))) { $Src = $cand; break }
+foreach ($candidate in @("plugins/clearjev-router", $env:PLUGIN_SRC)) {
+  if ($candidate -and (Test-Path (Join-Path $candidate ".codex-plugin/plugin.json"))) {
+    $Src = (Resolve-Path $candidate).Path
+    break
+  }
 }
 if (-not $Src) {
   $tmp = Join-Path $env:TEMP ("clearjev-" + [guid]::NewGuid().ToString("N"))
@@ -18,85 +19,89 @@ if (-not $Src) {
   $Src = Join-Path $tmp "ClearJev-main/plugins/clearjev-router"
 }
 
-$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
-$skill1 = Join-Path $codexHome "skills/clearjev-router"
-$skill2 = Join-Path $HOME ".agents/skills/clearjev-router"
+$usePy = $null -ne (Get-Command py -ErrorAction SilentlyContinue)
+if (-not $usePy -and -not (Get-Command python -ErrorAction SilentlyContinue)) {
+  throw "Python 3 is required"
+}
+function Invoke-Python([string[]]$Arguments) {
+  if ($script:usePy) { & py -3 @Arguments } else { & python @Arguments }
+  if ($LASTEXITCODE -ne 0) { throw "Python command failed ($LASTEXITCODE)" }
+}
 
-# 2. Install the skill in both discovery roots.
+$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
+$runtime = Join-Path $codexHome "clearjev-runtime"
+$skill1 = Join-Path $codexHome "skills/clearjev"
+$skill2 = Join-Path $HOME ".agents/skills/clearjev"
+$prompts = Join-Path $codexHome "prompts"
+$binDir = Join-Path $HOME ".local/bin"
+foreach ($dir in @($codexHome, $prompts, $binDir)) {
+  if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+}
+if (Test-Path $runtime) { Remove-Item -Recurse -Force $runtime }
+Copy-Item -Recurse $Src $runtime
+Write-Host "runtime -> $runtime"
 foreach ($dest in @($skill1, $skill2)) {
   $parent = Split-Path $dest
-  if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent | Out-Null }
+  if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
   if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
-  Copy-Item -Recurse -Path $Src -Destination $dest
+  Copy-Item -Recurse (Join-Path $runtime "skills/clearjev") $dest
   Write-Host "skill -> $dest"
 }
-$hookScript = Join-Path $skill1 "scripts/jev_route.py"
+Copy-Item -Force (Join-Path $runtime "scripts/clearjev.cmd") (Join-Path $binDir "clearjev.cmd")
+Copy-Item -Force (Join-Path $runtime "prompts/*.md") $prompts
+Write-Host "chat prompts -> $prompts"
 
-# Python launcher: prefer py, fall back to python.
-$py = "py -3"
-try { & py -3 --version 2>$null | Out-Null } catch { $py = "python" }
-try { & $py.Split(" ")[0] --version 2>$null | Out-Null }
-catch { Write-Error "Python 3 is required (install from python.org)"; exit 1 }
+$hookScript = Join-Path $runtime "scripts/jev_route.py"
+$env:CLEARJEV_HOOK_CMD = if ($usePy) { "py -3 `"$hookScript`"" } else { "python `"$hookScript`"" }
+$env:CLEARJEV_CODEX_HOME = $codexHome
+$mergeHooks = @'
+import json, os, shutil
+home = os.environ["CLEARJEV_CODEX_HOME"]
+path = os.path.join(home, "hooks.json")
+if os.path.exists(path):
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise SystemExit("existing hooks.json is invalid; not modified: " + str(exc))
+    shutil.copy2(path, path + ".clearjev.bak")
+else:
+    data = {}
+groups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
+entry = {"type": "command", "command": os.environ["CLEARJEV_HOOK_CMD"],
+         "timeout": 12, "statusMessage": "ClearJev routing",
+         "additionalContextLimit": 2000}
+found = False
+for group in groups:
+    for hook in group.get("hooks", []):
+        command = hook.get("command", "")
+        if "clearjev-runtime" in command or "clearjev-router/scripts/jev_route.py" in command:
+            hook.clear(); hook.update(entry); found = True
+if not found:
+    groups.append({"hooks": [entry]})
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2); f.write("\n")
+print("hook -> " + path)
+'@
+if ($usePy) { $mergeHooks | & py -3 - } else { $mergeHooks | & python - }
+if ($LASTEXITCODE -ne 0) { throw "Could not merge hooks.json" }
 
-# 3. Merge hook into hooks.json.
-if (-not (Test-Path $codexHome)) { New-Item -ItemType Directory -Path $codexHome | Out-Null }
-$hooksPath = Join-Path $codexHome "hooks.json"
-$data = @{ hooks = @{} }
-if (Test-Path $hooksPath) {
-  try { $data = Get-Content $hooksPath -Raw | ConvertFrom-Json -AsHashtable } catch { $data = @{ hooks = @{} } }
-}
-if (-not $data.hooks) { $data.hooks = @{} }
-$entry = @{ type = "command"; command = "$py `"$hookScript`""; timeout = 12;
-            statusMessage = "ClearJev routing"; additionalContextLimit = 2000 }
-$groups = $data.hooks["UserPromptSubmit"]
-if (-not $groups) { $groups = @(); $data.hooks["UserPromptSubmit"] = $groups }
-$found = $false
-foreach ($g in $groups) {
-  foreach ($h in $g.hooks) {
-    if ($h.command -like "*jev_route.py*") { foreach ($k in $entry.Keys) { $h[$k] = $entry[$k] }; $found = $true }
-  }
-}
-if (-not $found) { $data.hooks["UserPromptSubmit"] += @{ hooks = @($entry) } }
-$data | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 $hooksPath
-Write-Host "hooks -> $hooksPath"
-
-# 4. Enable features in config.toml.
-$cfgPath = Join-Path $codexHome "config.toml"
-$text = ""
-if (Test-Path $cfgPath) { $text = Get-Content $cfgPath -Raw }
-$need = @()
-if ($text -notmatch "skills") { $need += "skills = true" }
-if (($text -notmatch "hooks") -and ($text -notmatch "codex_hooks")) { $need += "hooks = true" }
-if ($need.Count -gt 0) {
-  if ($text -notmatch "\[features\]") { $text = $text.Trim() + "`n`n[features]`n" }
-  $text = $text.TrimEnd() + "`n" + ($need -join "`n") + "`n"
-  Set-Content -Encoding utf8 $cfgPath $text
-  Write-Host "config -> $cfgPath"
-} else { Write-Host "config already enables skills+hooks" }
-
-# 5. `clearjev` CLI on PATH.
-$binDir = Join-Path $HOME ".local/bin"
-if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir | Out-Null }
-Copy-Item -Force (Join-Path $skill1 "scripts/clearjev.cmd") (Join-Path $binDir "clearjev.cmd")
-Write-Host "cli -> $binDir\clearjev.cmd"
-if (($env:PATH -split ";") -notcontains $binDir) {
-  Write-Host "NOTE: add $binDir to your user PATH to use 'clearjev on|off|status'."
-}
-
-# 6. API key.
 if (-not $env:TYPESAFE_API_KEY) {
   Write-Host ""
-  Write-Host "Get a Jev API key at https://console.typesafe.ai/keys"
-  $key = Read-Host "Paste TYPESAFE_API_KEY (Enter to skip, heuristic fallback will be used)"
-  if ($key) {
-    [Environment]::SetEnvironmentVariable("TYPESAFE_API_KEY", $key, "User")
-    $env:TYPESAFE_API_KEY = $key
-    Write-Host "key saved to user environment"
-  } else { Write-Host "No key set — continuing with heuristic fallback." }
+  Write-Host "ClearJev sends prompt text and limited repository metadata to TypeSafe when Jev is enabled."
+  Write-Host "Get a key at https://console.typesafe.ai/keys, or leave this empty for heuristic fallback."
+  $secure = Read-Host "TYPESAFE_API_KEY" -AsSecureString
+  $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  try { $env:TYPESAFE_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
+  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
 }
-
+if ($env:TYPESAFE_API_KEY) {
+  Invoke-Python @($hookScript, "key", "import-env")
+} else {
+  Write-Host "No key saved; heuristic fallback remains available."
+}
+Invoke-Python @($hookScript, "status")
 Write-Host ""
-& $py.Split(" ")[0] $hookScript --check
-Write-Host ""
-Write-Host "Done. Restart Codex (CLI/App), review the hook once in /hooks, then just write prompts."
-Write-Host "Pause anytime: clearjev off | resume: clearjev on | status: clearjev status"
+Write-Host "Installed. Restart Codex, trust ClearJev in /hooks, then open a new chat."
+Write-Host 'Chat: use $clearjev with on/off/status/models/key actions.'
+Write-Host "Shell: $binDir\clearjev.cmd status"

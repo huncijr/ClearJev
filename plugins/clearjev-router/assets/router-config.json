@@ -1,0 +1,46 @@
+{
+  "jev": {
+    "model": "jev-latest",
+    "endpoint": "https://api.typesafe.ai/v1/systemone",
+    "timeout_seconds": 8
+  },
+  "weights": {
+    "coding": 0.3,
+    "reasoning": 0.25,
+    "repository": 0.15,
+    "risk": 0.2,
+    "ambiguity": 0.1
+  },
+  "thresholds": {
+    "intent_confidence_floor": 0.6,
+    "complexity_confidence_floor": 0.5,
+    "security_noul_floor": 0.7
+  },
+  "models": {
+    "gpt-6-astra": {
+      "capabilities": {"coding": 10, "reasoning": 10, "planning": 10, "architecture": 10, "context": 10, "explanation": 9},
+      "cost_class": 4,
+      "reasoning": ["low", "medium", "high", "xhigh", "max", "ultra"]
+    },
+    "gpt-5.6-sol": {
+      "capabilities": {"coding": 9, "reasoning": 8, "planning": 8, "architecture": 8, "context": 8, "explanation": 7},
+      "cost_class": 3,
+      "reasoning": ["low", "medium", "high", "xhigh", "max", "ultra"]
+    },
+    "gpt-5.6-terra": {
+      "capabilities": {"coding": 6, "reasoning": 5, "planning": 5, "architecture": 4, "context": 6, "explanation": 7},
+      "cost_class": 2,
+      "reasoning": ["low", "medium", "high", "xhigh", "max", "ultra"]
+    },
+    "gpt-5.6-luna": {
+      "capabilities": {"coding": 4, "reasoning": 3, "planning": 2, "architecture": 2, "context": 4, "explanation": 8},
+      "cost_class": 1,
+      "reasoning": ["low", "medium", "high", "xhigh", "max"]
+    },
+    "gpt-5.5": {
+      "capabilities": {"coding": 7, "reasoning": 7, "planning": 6, "architecture": 6, "context": 7, "explanation": 7},
+      "cost_class": 2,
+      "reasoning": ["low", "medium", "high", "xhigh"]
+    }
+  }
+}
