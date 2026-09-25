@@ -123,3 +123,6 @@ tests/test_router.py             # 15 tests, no network needed
 python3 -m unittest discover -s tests -v
 echo '{"prompt":"...","cwd":"."}' | python3 plugins/clearjev-router/scripts/jev_route.py
 ```
+
+See [`docs/testing.md`](docs/testing.md) for the full matrix: test from Codex
+CLI → full uninstall → re-download and retest in the Codex App.
