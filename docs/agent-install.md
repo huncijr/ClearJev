@@ -87,7 +87,10 @@ actually change. A `Switch failed (<reason>)` line is an honest, valid
 outcome: the session kept its previous model.
 
 Chat control checks: `$clearjev off` (next prompt: no routing block),
-`$clearjev on` (block returns), `$clearjev models list`.
+`$clearjev on` (block returns), `$clearjev models list`. Where the agent
+sandbox blocks shell commands (Desktop App bubblewrap), use the no-shell
+path instead: type `clearjev off`, `clearjev on`, or `clearjev status` as a
+plain message — the hook executes it itself.
 
 ## 7. CLI vs App differences
 
@@ -98,6 +101,9 @@ Chat control checks: `$clearjev off` (next prompt: no routing block),
   `Switch unavailable in this host ... use /model` instead of a bogus
   failure: follow the recommendation with native `/model`.
   `clearjev run '<prompt>'` (CLI) remains the guaranteed pre-routed path.
+  The App agent sandbox (bubblewrap) may also block shell commands entirely;
+  then control ClearJev with plain `clearjev on` / `clearjev off` /
+  `clearjev status` messages — the hook executes those itself.
 
 ## 8. If it does not work (check in order)
 

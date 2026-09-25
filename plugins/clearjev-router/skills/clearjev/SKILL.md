@@ -35,7 +35,8 @@ ClearJev — what should I do?
 4. key — API key status / set / remove
 5. models — list / add / remove models and reasoning levels
 6. run — start a pre-routed Codex session
-Reply with a number or a word.
+Reply with a number, a word, or a plain `clearjev <action>` message
+(the hook executes that itself, no shell needed).
 ```
 
 When the reply names an action, execute it immediately.

@@ -108,7 +108,7 @@ before a release:
 1. **Direct hook call (no Codex at all)** — fastest iteration:
    `echo '{"prompt":"...","cwd":"."}' | python3
    plugins/clearjev-router/scripts/jev_route.py`
-2. **Unit tests** — `python3 -m unittest discover -s tests -v` (47 tests,
+2. **Unit tests** — `python3 -m unittest discover -s tests -v` (52 tests,
    no network, hermetic state/catalog/credentials via temp dirs).
 3. **`clearjev status` / `clearjev check`** — on/off state, key presence,
    model counts, live Jev ping + fallback smoke test.
@@ -136,4 +136,4 @@ before a release:
 - `--check` is `OK` with a valid key and honestly reports fallback without one.
 - Uninstall leaves no trace: no status line, no block, no `clearjev` binary
   (key+state gone only with `--purge`/`-Purge`).
-- Unit suite stays 47/47 green after any change.
+- Unit suite stays 52/52 green after any change.

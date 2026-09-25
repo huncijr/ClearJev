@@ -91,6 +91,12 @@ $clearjev run 'Implement Stripe subscriptions with webhooks'
 A bare `$clearjev` (or a garbled request) returns a numbered
 on/off/status/key/models/run menu as a fallback.
 
+No-shell control (works even where the agent sandbox blocks shell commands,
+e.g. Desktop App bubblewrap): type `clearjev on`, `clearjev off`, or
+`clearjev status` as a plain message. The hook executes it itself and the
+agent reports the result — no approval, no shell. Exact match only, so
+discussing ClearJev never toggles anything.
+
 Deprecated-but-working CLI/IDE aliases (installed as `~/.codex/prompts/*.md`).
 These are the one-Enter on/off switches — one action per command, no menu:
 
@@ -228,7 +234,7 @@ plugins/clearjev-router/
   scripts/install.sh / install.ps1 / uninstall.sh / uninstall.ps1
   assets/router-config.json      # THE config: endpoint, weights, thresholds, model profiles
   references/                    # question definitions, routing rules, model notes
-tests/test_router.py             # 47 tests, no network needed
+tests/test_router.py             # 52 tests, no network needed
 ```
 
 ## How routing works

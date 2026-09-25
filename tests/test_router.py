@@ -376,6 +376,65 @@ def switch_decision(model="gpt-5.6-luna", current="gpt-5.6-sol"):
             "current_model": current}
 
 
+class TestChatControl(unittest.TestCase):
+    """Hook-side on/off/status: exact prompts only, no shell needed."""
+
+    def test_exact_forms_execute(self):
+        for text, word in (("clearjev off", "OFF"), ("clearjev on", "ON"),
+                           ("  ClearJev Status ", "ClearJev status")):
+            proc = run_hook({"prompt": text, "cwd": "/tmp"})
+            self.assertEqual(proc.returncode, 0, text)
+            outer = json.loads(proc.stdout)
+            ctx = outer["hookSpecificOutput"]["additionalContext"]
+            self.assertTrue(ctx.startswith("ClearJev control result"), text)
+            self.assertIn(word, ctx)
+
+    def test_mention_plus_action_executes(self):
+        proc = run_hook(
+            {"prompt": "[$clearjev](/x/SKILL.md) off", "cwd": "/tmp"})
+        ctx = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertTrue(ctx.startswith("ClearJev control result"))
+        self.assertIn("OFF", ctx)
+
+    def test_control_works_while_routing_off(self):
+        proc, state = run_cli("off")
+        hooked = run_hook({"prompt": "clearjev on", "cwd": "/tmp"},
+                          {"CLEARJEV_STATE": state})
+        ctx = json.loads(hooked.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("ClearJev routing ON", ctx)
+
+    def test_near_matches_route_normally(self):
+        for text in ("off", "status", "clearjev off please",
+                     "what does clearjev off do?", "clearjev models list",
+                     "please turn clearjev off", "[$clearjev](/x/SKILL.md) hello"):
+            self.assertIsNone(
+                _chat_control(text), "must not intercept: " + text)
+
+    def test_off_still_silences_routing(self):
+        proc, state = run_cli("off")
+        hooked = run_hook({"prompt": "Implement a full auth system.", "cwd": "/tmp"},
+                          {"CLEARJEV_STATE": state})
+        self.assertEqual(hooked.stdout, "")
+
+
+def _chat_control(text):
+    # Hermetic: never touch the real ~/.codex config from unit tests.
+    import importlib.util
+    import tempfile as _tf
+    tmp = _tf.mkdtemp(prefix="clearjev-ctl-")
+    os.environ["CLEARJEV_CONFIG"] = os.path.join(tmp, "config.json")
+    os.environ["CLEARJEV_STATE"] = os.environ["CLEARJEV_CONFIG"]
+    os.environ["CLEARJEV_CREDENTIALS"] = os.path.join(tmp, "creds.json")
+    try:
+        spec = importlib.util.spec_from_file_location("jev_ctl", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.chat_control_command(text)
+    finally:
+        for key in ("CLEARJEV_CONFIG", "CLEARJEV_STATE", "CLEARJEV_CREDENTIALS"):
+            os.environ.pop(key, None)
+
+
 class TestAutoSwitch(unittest.TestCase):
     """Same-thread switch: success, failure, and opt-out paths."""
 

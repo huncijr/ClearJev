@@ -757,6 +757,60 @@ def status():
     return 0
 
 
+# ---------------------------------------------------------------- in-chat control
+#
+# When the agent cannot run shell commands (Desktop App sandbox), typing
+# `clearjev on`, `clearjev off` or `clearjev status` as the prompt itself is
+# executed here, inside the hook, with no shell involved.
+
+def strip_skill_mentions(text):
+    """Remove `$skill` markdown mentions, e.g. `[$clearjev](.../SKILL.md)`.
+
+    Returns (cleaned_text, had_mention).
+    """
+    import re
+    pattern = r"\[[^\]]*\]\([^)]*SKILL\.md\)"
+    had_mention = re.search(pattern, text or "") is not None
+    return re.sub(pattern, " ", text or ""), had_mention
+
+
+def chat_control_command(prompt):
+    """Execute exact in-chat control prompts. Returns output or None.
+
+    Accepts `clearjev on|off|status`, or a `$clearjev` mention followed by a
+    bare action word (the mention text is stripped first). Anything longer
+    routes normally, so discussing ClearJev never toggles. A bare action
+    word without any mention also routes normally (`status` alone belongs
+    to Codex, not to us).
+    """
+    import io
+    stripped, had_mention = strip_skill_mentions(prompt)
+    cleaned = " ".join(stripped.split()).lower()
+    if cleaned.startswith("clearjev "):
+        action = cleaned[len("clearjev "):]
+    elif had_mention:
+        action = cleaned
+    else:
+        return None
+    if action not in ("on", "off", "status"):
+        return None
+    buffer = io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = buffer
+    try:
+        if action == "on":
+            ok, msg = set_enabled(True)
+            print("ClearJev routing ON (" + msg + ")" if ok else "Failed: " + msg)
+        elif action == "off":
+            ok, msg = set_enabled(False)
+            print("ClearJev routing OFF (" + msg + ")" if ok else "Failed: " + msg)
+        else:
+            status()
+    finally:
+        sys.stdout = old_stdout
+    return buffer.getvalue().strip()
+
+
 # ---------------------------------------------------------------- entry
 
 def set_api_key(value):
@@ -1206,8 +1260,6 @@ def main(argv):
         print("Use 'clearjev models --help' or see README.md for details.")
         return 0
     disabled, _reason = is_disabled()
-    if disabled:
-        return 0  # paused: silent no-op, zero cost
     prompt, cwd = "", ""
     if "--prompt" in args:
         try:
@@ -1237,6 +1289,18 @@ def main(argv):
         cwd = payload.get("cwd", "") if isinstance(payload, dict) else ""
     if not prompt:
         return 0  # fail-open: nothing to judge
+    # In-chat control without agent shell: exact `clearjev on|off|status`
+    # prompts are executed by the hook itself. This is the only control path
+    # that works where the agent sandbox blocks shell commands (Desktop App
+    # bubblewrap). Runs even when routing is paused (that is the point of
+    # `clearjev on`). Exact match only, so discussing ClearJev never toggles.
+    control = chat_control_command(prompt)
+    if control is not None:
+        emit("ClearJev control result (report this to the user, briefly):\n"
+             + control)
+        return 0
+    if disabled:
+        return 0  # paused: silent no-op, zero cost
     if prompt.lstrip().lower().startswith("noroute:"):
         return 0  # one-shot bypass for this prompt only
     if prompt.lstrip().lower().startswith("reroute:"):
