@@ -72,15 +72,16 @@ rename, or single-file edit must not trigger heavy reasoning or deep scans.
 
 If no routing block was injected, routing is paused (`clearjev off`,
 `CLEARJEV_ENABLED=0`, or a `noroute:`/`reroute:` prompt) — work normally and
-do not ask about it. The user re-enables it with `clearjev on` (shell) or
-`$clearjev on` / `@ClearJev on` (chat).
+do not ask about it. The user re-enables it with `clearjev on` (shell or
+plain chat message) or `$clearjev on` (Codex CLI chat).
 
-## 7. Managing ClearJev from chat
+## 7. Managing ClearJev from chat (Codex CLI only)
 
 The `clearjev` skill exposes: `on`, `off`, `status`, `key set/unset/status`,
 `models list/available/add/remove/reasoning`, `run`, `autoswitch on/off`.
 Run exactly one command per request and report its output. Never print an
-API key back into chat.
+API key back into chat. Outside Codex CLI the skill refuses (see its host
+check); there, plain `clearjev on|off|status` messages still work hook-side.
 
 ## 8. Never do this
 

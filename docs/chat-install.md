@@ -68,7 +68,9 @@ its steps manually one by one with the same effect.
 - `/prompts:clearjev`, `/prompts:clearjev-on`, `/prompts:clearjev-off`,
   `/prompts:clearjev-add`, `/prompts:clearjev-remove`, `/prompts:clearjev-key`
   — deprecated-but-working CLI/IDE aliases for the same actions.
-- `@ClearJev ...` — same skill in the Codex App.
+- `@ClearJev ...` — refused in the Codex App (skill is CLI-only). There,
+  routing stays advisory: follow recommendations with native `/model`, and
+  use plain `clearjev on|off|status` messages for hook-side control.
 - `noroute: ...` — one prompt without routing.
 - `reroute: ...` — correct a recommendation conversationally (hook stays
   silent for that message by design).

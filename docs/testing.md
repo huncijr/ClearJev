@@ -96,9 +96,10 @@ are preserved for reinstall.
    then restart the App, approve the hook, open a **new chat**.
 3. Send T1–T5 again, compare routing blocks with Round 1 (same intents,
    same model families expected).
-4. In-chat control check: `@ClearJev off` → next prompt has no routing
-   block; `@ClearJev on` restores it. `@ClearJev models list` shows
-   catalog-filtered profiles.
+4. In-App behavior check: `@ClearJev off` → the skill refuses with the
+   CLI-only message (expected). Plain `clearjev off` message → hook executes
+   it, next prompt has no routing block; `clearjev on` restores it. Routing
+   blocks stay advisory (`Switch unavailable in this host`).
 
 ## Methods to exercise the skill (agent-testing toolbox)
 
@@ -114,9 +115,10 @@ before a release:
    model counts, live Jev ping + fallback smoke test.
 4. **Automatic hook path** — just write normal prompts in a Codex session;
    the `UserPromptSubmit` hook fires before every prompt.
-5. **Explicit skill invocation** — type `$clearjev` (CLI) or `@ClearJev`
-   (App) in chat to exercise on/off/models/key/run (separates install
-   problems from trigger problems).
+5. **Explicit skill invocation** — type `$clearjev` (CLI only) in chat to
+   exercise on/off/models/key/run (separates install problems from trigger
+   problems). In the App the skill refuses; use plain
+   `clearjev on|off|status` messages instead.
 6. **`codex exec` (non-interactive, scriptable)** — repeatable agent runs
    without the TUI, e.g.:
    `codex exec --skip-git-repo-check "Explain dependency injection in

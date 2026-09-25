@@ -1,7 +1,7 @@
 {
   "name": "clearjev-router",
   "version": "0.3.0",
-  "description": "Automatic pre-prompt routing for Codex: Jev (TypeSafe System One) judges every prompt and switches the session to the chosen model plus reasoning effort via the local app-server. Chat control via $clearjev; pre-routed CLI sessions via `clearjev run`.",
+  "description": "Automatic pre-prompt routing for Codex CLI: Jev (TypeSafe System One) judges every prompt and switches the session to the chosen model plus reasoning effort via the local app-server. CLI chat control via $clearjev; pre-routed CLI sessions via `clearjev run`.",
   "author": {
     "name": "ClearJev"
   },
@@ -11,7 +11,7 @@
   "skills": "./skills",
   "hooks": "./hooks/hooks.json",
   "interface": {
-    "longDescription": "ClearJev adds automatic Jev routing to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via the TypeSafe Jev API, switches the thread to the chosen model and reasoning effort through the local Codex app-server, and injects a concise confirmation (model, reasoning, planning, validation) as developer context. A switch is reported only after confirmation; failures stay honest advisory output. Manage routing from chat with the $clearjev skill (on/off/status/models/key/autoswitch). ClearJev is an independent open-source project, not affiliated with or endorsed by TypeSafe AI, Inc. Users must provide their own TypeSafe API key.",
+    "longDescription": "ClearJev adds automatic Jev routing to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via the TypeSafe Jev API, switches the thread to the chosen model and reasoning effort through the local Codex app-server, and injects a concise confirmation (model, reasoning, planning, validation) as developer context. A switch is reported only after confirmation; failures stay honest advisory output. Manage routing from Codex CLI chat with the $clearjev skill (on/off/status/models/key/autoswitch). The skill is CLI-only and refuses on other hosts; there the hook stays advisory and plain `clearjev on|off|status` messages still work hook-side. ClearJev is an independent open-source project, not affiliated with or endorsed by TypeSafe AI, Inc. Users must provide their own TypeSafe API key.",
     "developerName": "ClearJev",
     "category": "Productivity",
     "defaultPrompt": [

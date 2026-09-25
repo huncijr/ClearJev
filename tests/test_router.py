@@ -587,6 +587,10 @@ class TestPackaging(unittest.TestCase):
             self.assertIn(item, text)
         # Picker trigger words in the description.
         self.assertIn("on/off/status", text.split("---")[1])
+        # CLI-only: mandatory host check with App refusal text.
+        self.assertIn("## Host check (mandatory, first step)", text)
+        self.assertIn("Codex CLI only", text)
+        self.assertIn("ClearJev control is CLI-only", text)
 
     def test_prompt_files_have_descriptions(self):
         proms = os.path.join(self.ROOT, "prompts")
@@ -597,6 +601,8 @@ class TestPackaging(unittest.TestCase):
         for name in names:
             with open(os.path.join(proms, name)) as f:
                 self.assertIn("description:", f.read())
+        with open(os.path.join(proms, "clearjev.md")) as f:
+            self.assertIn("Codex CLI only", f.read())
 
     def test_shim_resolves_bundled_or_installed_runtime(self):
         with open(os.path.join(self.ROOT, "scripts", "clearjev")) as f:

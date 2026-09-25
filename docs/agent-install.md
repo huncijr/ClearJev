@@ -10,8 +10,10 @@
 ClearJev is automatic pre-prompt routing for Codex: a `UserPromptSubmit`
 hook judges every prompt with the TypeSafe Jev API and switches the thread
 to the chosen model and reasoning effort through the local Codex app-server.
-A `clearjev` chat skill (`$clearjev` in CLI, `@ClearJev` in the App) controls
-on/off, API key, models, and reasoning levels.
+A `clearjev` chat skill (`$clearjev` in Codex CLI) controls
+on/off, API key, models, and reasoning levels. The skill is CLI-only and
+refuses on other hosts; in the App the hook stays advisory and plain
+`clearjev on|off|status` messages still work hook-side.
 
 ## 2. Install from Codex Hub (marketplace)
 

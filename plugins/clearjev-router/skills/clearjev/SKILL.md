@@ -1,9 +1,26 @@
 ---
 name: clearjev
-description: ClearJev on/off/status switch and router control, in any language. Use when the user says ClearJev, $clearjev, or asks (however phrased) to turn routing on or off, check status, configure a TypeSafe API key, add or remove routing models, change allowed reasoning levels, or launch a routed Codex task.
+description: ClearJev on/off/status switch and router control for Codex CLI, in any language. Use when the user says ClearJev, $clearjev, or asks (however phrased) to turn routing on or off, check status, configure a TypeSafe API key, add or remove routing models, change allowed reasoning levels, or launch a routed Codex task.
 ---
 
-# ClearJev Control
+# ClearJev Control (Codex CLI only)
+
+## Host check (mandatory, first step)
+
+This skill operates in **Codex CLI only**. If you are NOT Codex CLI (e.g.
+Desktop App, web, mobile, IDE extension), do not execute any action below.
+Reply with exactly this text and nothing else:
+
+```
+ClearJev control is CLI-only. Here routing stays advisory: follow the
+recommendation with native /model. Plain `clearjev on`, `clearjev off`
+and `clearjev status` messages still work (the hook executes those
+itself). For full control, use Codex CLI.
+```
+
+Rationale: outside the CLI the thread is not visible to the reachable
+app-server (switching is impossible) and the agent sandbox may block shell
+commands entirely, so every shell-backed action would fail.
 
 ## Act first (default)
 

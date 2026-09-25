@@ -113,17 +113,19 @@ Note: chat setup types the key into chat history. Prefer the terminal
 (`clearjev key set '...'`); if you use chat, the skill warns once and never
 prints the key back.
 
-### 2. Codex App chat
+### 2. Codex App chat (advisory routing only)
 
 Install via the Plugins tab (`clearjev-router` from the ClearJev
-marketplace), or run the shell installer on the same machine. In chat,
-mention the skill explicitly:
+marketplace), or run the shell installer on the same machine. The hook keeps
+routing and recommending there, but the **`@ClearJev` skill refuses control
+actions in the App — it is CLI-only** (the App thread is invisible to the
+reachable app-server and its sandbox may block shell commands, so every
+shell-backed action would fail). In the App:
 
-```
-@ClearJev status
-@ClearJev off
-@ClearJev models list
-```
+- Follow recommendations with native `/model`.
+- Plain `clearjev on`, `clearjev off`, `clearjev status` messages still work
+  (the hook executes those itself, no shell needed).
+- Full control lives in Codex CLI.
 
 Manual key step for marketplace installs (the marketplace cannot collect
 secrets): run `clearjev key set '...'` once in a terminal on the same
@@ -225,7 +227,7 @@ See `CODEX.md` for how Codex App + CLI use the Jev layer.
 ```
 plugins/clearjev-router/
   .codex-plugin/plugin.json      # plugin manifest (skills + hooks)
-  skills/clearjev/SKILL.md       # chat control skill ($clearjev / @ClearJev)
+  skills/clearjev/SKILL.md       # CLI chat control skill ($clearjev)
   skills/clearjev/agents/openai.yaml
   prompts/clearjev*.md           # /prompts:clearjev-* chat aliases
   hooks/hooks.json               # UserPromptSubmit -> jev_route.py
