@@ -35,7 +35,9 @@ fi
 
 rm -rf "$CODEX_HOME/clearjev-runtime" "$CODEX_HOME/skills/clearjev" \
   "$HOME/.agents/skills/clearjev"
-rm -f "$HOME/.local/bin/clearjev"
+# Legacy v0.1 leftovers (wrong-depth skill dir, old Windows shim).
+rm -rf "$CODEX_HOME/skills/clearjev-router" "$HOME/.agents/skills/clearjev-router"
+rm -f "$HOME/.local/bin/clearjev" "$HOME/.local/bin/clearjev.cmd"
 for name in clearjev clearjev-on clearjev-off clearjev-add clearjev-remove clearjev-key; do
   rm -f "$CODEX_HOME/prompts/$name.md"
 done

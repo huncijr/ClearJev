@@ -26,7 +26,9 @@ with open(path, "w", encoding="utf-8") as f: json.dump(data, f, indent=2); f.wri
 foreach ($path in @(
   (Join-Path $codexHome "clearjev-runtime"),
   (Join-Path $codexHome "skills/clearjev"),
-  (Join-Path $HOME ".agents/skills/clearjev")
+  (Join-Path $HOME ".agents/skills/clearjev"),
+  (Join-Path $codexHome "skills/clearjev-router"),
+  (Join-Path $HOME ".agents/skills/clearjev-router")
 )) { if (Test-Path $path) { Remove-Item -Recurse -Force $path } }
 Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $HOME ".local/bin/clearjev.cmd")
 foreach ($name in @("clearjev", "clearjev-on", "clearjev-off", "clearjev-add", "clearjev-remove", "clearjev-key")) {

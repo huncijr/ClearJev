@@ -39,6 +39,9 @@ for dest in "$SKILL1" "$SKILL2"; do
   cp -R "$RUNTIME/skills/clearjev" "$dest"
   echo "skill -> $dest"
 done
+# Legacy cleanup (v0.1 layout): wrong-depth skill dir + old shims.
+rm -rf "$CODEX_HOME/skills/clearjev-router" "$HOME/.agents/skills/clearjev-router"
+rm -f "$BIN/clearjev.cmd"
 
 cp -f "$RUNTIME/scripts/clearjev" "$BIN/clearjev"
 chmod +x "$BIN/clearjev"
