@@ -1,76 +1,76 @@
-# ClearJev telepítése chaten keresztül (Codex CLI chatbot)
+# Installing ClearJev via chat (Codex CLI chatbot)
 
-> Nem kell terminálos `curl`. Nyisd meg a Codex CLI-t (`codex` parancs a
-> terminálban), és illeszd be az alábbi promptot egyben. Az AI végigviszi a
-> telepítést — neked csak jóváhagyásokat kell adnod, a végén pedig trustolnod
-> a hookot és új sessiont nyitnod (ezt csak te tudod megcsinálni).
+> No terminal `curl` needed. Open the Codex CLI (`codex` command in your
+> terminal) and paste the prompt below as-is. The AI will walk through the
+> installation — you only need to grant approvals, then trust the hook and
+> open a new session at the end (only you can do that).
 >
-> Előfeltétel: Codex CLI + `python3` a gépen. Jev API key jó ha van
-> (https://console.typesafe.ai/keys), de anélkül is felmegy (heurisztikus
-> fallback módban).
+> Prerequisites: Codex CLI + `python3` on the machine. A Jev API key is nice
+> to have (https://console.typesafe.ai/keys), but the install works without
+> it (heuristic fallback mode).
 
-## Másolható prompt
+## Copy-paste prompt
 
 ```text
-Telepítsd a ClearJev skillt és hookot a gépemre:
+Install the ClearJev skill and hook on my machine:
 
-1. Klónozd a https://github.com/huncijr/ClearJev repót egy temp mappába
-   (elég shallow clone: git clone --depth 1).
-2. Futtasd a plugins/clearjev-router/scripts/install.sh -t a klónból.
-   Ez bemásolja a skillt a ~/.codex/skills + ~/.agents/skills mappákba,
-   bejegyzi a UserPromptSubmit hookot a ~/.codex/hooks.json-be (merge, a
-   meglévő hookjaim megtartásával), engedélyezi a skills+hooks feature-öket
-   a ~/.codex/config.toml-ban, és felteszi a `clearjev` parancsot a
-   ~/.local/bin-be. A ~/.local/bin-en kívül máshova rendszer-szinten ne írj.
-3. Ha a script TYPESAFE_API_KEY-t kér, hagyd üresen (Enter) — a keyt én adom
-   meg később kézzel.
-4. A végén futtasd le:
+1. Clone the https://github.com/huncijr/ClearJev repo into a temp folder
+   (a shallow clone is enough: git clone --depth 1).
+2. Run plugins/clearjev-router/scripts/install.sh from the clone.
+   It copies the skill into ~/.codex/skills + ~/.agents/skills,
+   registers the UserPromptSubmit hook in ~/.codex/hooks.json (merge, keep
+   my existing hooks), enables the skills+hooks features in
+   ~/.codex/config.toml, and installs the `clearjev` command into
+   ~/.local/bin. Do not write system-wide anywhere outside ~/.local/bin.
+3. If the script asks for TYPESAFE_API_KEY, leave it empty (Enter) — I will
+   provide the key manually later.
+4. At the end, run:
    python3 ~/.codex/skills/clearjev-router/scripts/jev_route.py --check
-   és mutasd meg a teljes kimenetet.
-5. Mondd el, mi a következő két kézi lépésem (Codex újraindítás + hook
-   trust /hooks-ban + új session), de azokat ne próbáld megcsinálni helyettem.
+   and show me the full output.
+5. Tell me my next two manual steps (Codex restart + hook trust in /hooks +
+   new session), but do not attempt them for me.
 
-Ha valamelyik lépéshez engedély kell (shell, hálózat), kérj jóváhagyást,
-ne kerüld meg. Ha az install.sh nem futtatható ezen a rendszeren, szólj, és
-a lépéseit kézzel, egyenként hajtsd végre ugyanazzal a hatással.
+If any step needs permission (shell, network), ask for approval, do not
+bypass it. If install.sh cannot run on this system, tell me, and perform
+its steps manually one by one with the same effect.
 ```
 
-## Kézi lépések a prompt után (neked)
+## Manual steps after the prompt (yours)
 
-1. **API key** (ha kihagytad):
+1. **API key** (if you skipped it):
    ```bash
-   export TYPESAFE_API_KEY="a_te_keyed"
+   export TYPESAFE_API_KEY="your_key_here"
    ```
-2. **Ellenőrzés**: `clearjev status` (ha `command not found`:
-   `export PATH="$HOME/.local/bin:$PATH"`), majd `clearjev check`.
-3. **Codex újraindítás** (CLI: kilépés + `codex` újra; App: új chat nem elég,
-   az Appot is érdemes újraindítani az első telepítéskor).
-4. **Hook trust**: CLI-ben `/hooks` → `ClearJev routing` / `jev_route.py`
-   (`UserPromptSubmit`) → jóváhagyás. Trust nélkül a Codex csendben kihagyja
-   a hookot.
-5. **Új session** nyitása, majd próbaprompt:
+2. **Verify**: `clearjev status` (if `command not found`:
+   `export PATH="$HOME/.local/bin:$PATH"`), then `clearjev check`.
+3. **Restart Codex** (CLI: quit + `codex` again; App: a new chat is not
+   enough, restart the App too on first install).
+4. **Hook trust**: in the CLI, `/hooks` → `ClearJev routing` / `jev_route.py`
+   (`UserPromptSubmit`) → approve. Without trust, Codex silently skips the
+   hook.
+5. Open a **new session**, then a test prompt:
    `Implement Stripe subscriptions with monthly/yearly plans, webhooks and access control.`
-   Elvárt: `ClearJev routing` státusz + routing blokk (`Model: gpt-6-sol · ...`).
+   Expected: a `ClearJev routing` status + routing block (`Model: gpt-6-sol · ...`).
 
-## Vezérlés chaten belül (telepítés után)
+## Controlling it from chat (after install)
 
-- Automatikus: semmit nem kell írni, minden prompt előtt routol.
-- `$clearjev-router` — a skill explicit meghívása.
-- `noroute: ...` — egy prompt routing nélkül.
-- `reroute: ...` — rossz döntés korrekciója.
-- Mondatban is kérheted az ügynököt: „Kapcsold ki a ClearJev routingot"
-  (ilyenkor az ügynök a `clearjev off` parancsot futtatja shellben —
-  shell-jog kell hozzá; ha megtagadja, terminálban: `clearjev off` / `on`).
+- Automatic: type nothing special, every prompt gets routed.
+- `$clearjev-router` — explicit skill invocation.
+- `noroute: ...` — one prompt without routing.
+- `reroute: ...` — correct a wrong decision.
+- You can also ask the agent in words: "Turn off ClearJev routing"
+  (the agent then runs `clearjev off` in a shell — needs shell rights;
+  if it refuses, use the terminal: `clearjev off` / `on`).
 
-## Ha nem működik (sorrendben ellenőrizd)
+## If it does not work (check in order)
 
-1. Megvan? `ls ~/.codex/skills/clearjev-router/SKILL.md`
-2. `clearjev status` mit ír?
-3. `/hooks`-ban trustolva van a hook? (Leggyakoribb ok.)
-4. A próba új sessionben történt?
-5. Nincs másik `clearjev-router` nevű skill?
+1. Is it there? `ls ~/.codex/skills/clearjev-router/SKILL.md`
+2. What does `clearjev status` say?
+3. Is the hook trusted in `/hooks`? (Most common cause.)
+4. Did the test run in a new session?
+5. No other skill named `clearjev-router`?
 
-## Eltávolítás (maradéktalanul visszafordítható)
+## Uninstall (fully reversible)
 
 ```bash
 clearjev off
@@ -78,5 +78,5 @@ rm -rf ~/.codex/skills/clearjev-router ~/.agents/skills/clearjev-router
 rm -f ~/.local/bin/clearjev
 ```
 
-majd vedd ki a `jev_route.py` bejegyzést a `~/.codex/hooks.json`
-`UserPromptSubmit` listájából (vagy tiltsd le `/hooks`-ban).
+then remove the `jev_route.py` entry from the `UserPromptSubmit` list in
+`~/.codex/hooks.json` (or disable it in `/hooks`).

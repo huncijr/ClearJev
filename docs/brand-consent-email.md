@@ -1,9 +1,9 @@
 # Brand consent request — send to support@typesafe.ai
 
-> Copy-paste sablon. Tárgy: `Brand use consent — "ClearJev" open-source Codex plugin using the Jev API`
-> Magyar megjegyzés: ez nem jogi beadvány, csak udvarias engedélykérés a név
-> tényszerű használatára. Ha kérnek, vállaljuk az átnevezést (B-terv nevek:
-> `ClearRouter`, `CodexRoute`).
+> Copy-paste template. Subject: `Brand use consent — "ClearJev" open-source Codex plugin using the Jev API`
+> Note: this is not a legal filing, just a polite permission request for
+> factual use of the name. If they ask, we commit to renaming (fallback
+> names: `ClearRouter`, `CodexRoute`).
 
 ---
 

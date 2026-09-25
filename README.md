@@ -30,9 +30,9 @@ curl -fsSL https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clear
 irm https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.ps1 | iex
 ```
 
-> Alternatíva terminál nélkül: nyisd meg a Codex CLI-t (`codex`), és
-> másold be a [`docs/chat-install.md`](docs/chat-install.md) promptját —
-> az AI végigviszi a telepítést.
+> No-terminal alternative: open the Codex CLI (`codex`) and paste the
+> prompt from [`docs/chat-install.md`](docs/chat-install.md) — the AI will
+> walk through the installation.
 
 This installs the skill (`$CODEX_HOME/skills` + `~/.agents/skills`), registers
 the `UserPromptSubmit` hook in `~/.codex/hooks.json`, and enables
