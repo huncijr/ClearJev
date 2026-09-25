@@ -1,4 +1,7 @@
 # ClearJev installer for Windows PowerShell 5.1+.
+# Idempotent: re-running without -Force detects the installed version and
+# stops with "already downloaded". Routing state (on/off) is never reset.
+param([switch]$Force)
 $ErrorActionPreference = "Stop"
 $Repo = "huncijr/ClearJev"
 
@@ -30,6 +33,19 @@ function Invoke-Python([string[]]$Arguments) {
 
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME ".codex" }
 $runtime = Join-Path $codexHome "clearjev-runtime"
+$manifest = Get-Content (Join-Path $Src ".codex-plugin/plugin.json") -Raw | ConvertFrom-Json
+$srcVersion = $manifest.version
+$installedVersionPath = Join-Path $runtime "VERSION"
+if (-not $Force -and (Test-Path $installedVersionPath) -and (Test-Path (Join-Path $runtime "scripts/jev_route.py"))) {
+  $installedVersion = (Get-Content $installedVersionPath -Raw).Trim()
+  if ($installedVersion -eq $srcVersion) {
+    Write-Host "ClearJev is already downloaded (v$installedVersion at $runtime)."
+    Write-Host "Re-running without -Force changes nothing (routing state preserved)."
+    Write-Host "Use -Force to reinstall, or run 'clearjev status' to verify."
+    exit 0
+  }
+  Write-Host "Installed v$installedVersion found, source is v$srcVersion — upgrading."
+}
 $skill1 = Join-Path $codexHome "skills/clearjev"
 $skill2 = Join-Path $HOME ".agents/skills/clearjev"
 $prompts = Join-Path $codexHome "prompts"
@@ -39,7 +55,8 @@ foreach ($dir in @($codexHome, $prompts, $binDir)) {
 }
 if (Test-Path $runtime) { Remove-Item -Recurse -Force $runtime }
 Copy-Item -Recurse $Src $runtime
-Write-Host "runtime -> $runtime"
+Set-Content -NoNewline $installedVersionPath $srcVersion
+Write-Host "runtime -> $runtime (v$srcVersion)"
 foreach ($dest in @($skill1, $skill2)) {
   $parent = Split-Path $dest
   if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
@@ -112,6 +129,8 @@ if ($env:TYPESAFE_API_KEY) {
 }
 Invoke-Python @($hookScript, "status")
 Write-Host ""
-Write-Host "Installed. Restart Codex, trust ClearJev in /hooks, then open a new chat."
+Write-Host "Installed and active by default (routing ON unless you turned it off"
+Write-Host "before — that state is preserved). Pause anytime: clearjev off."
+Write-Host "Restart Codex, trust ClearJev in /hooks, then open a new chat."
 Write-Host 'Chat: use $clearjev with on/off/status/models/key actions.'
 Write-Host "Shell: $binDir\clearjev.cmd status"

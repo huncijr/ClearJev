@@ -1,11 +1,17 @@
 #!/bin/sh
 # ClearJev installer for macOS and Linux.
+# Idempotent: re-running without --force detects the installed version and
+# stops with "already downloaded". Routing state (on/off) is never reset.
+# Usage: install.sh [--force]
 set -eu
+
+FORCE=0
+[ "${1:-}" = "--force" ] && FORCE=1
 
 REPO="huncijr/ClearJev"
 SRC=""
 TMP=""
-cleanup() { [ -n "$TMP" ] && [ -d "$TMP" ] && rm -rf "$TMP"; }
+cleanup() { [ -n "$TMP" ] && [ -d "$TMP" ] && rm -rf "$TMP"; return 0; }
 trap cleanup EXIT
 
 if [ -f "plugins/clearjev-router/.codex-plugin/plugin.json" ]; then
@@ -23,6 +29,19 @@ fi
 command -v python3 >/dev/null || { echo "error: python3 is required" >&2; exit 1; }
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 RUNTIME="$CODEX_HOME/clearjev-runtime"
+
+SRC_VERSION="$(python3 -c "import json;print(json.load(open('$SRC/.codex-plugin/plugin.json'))['version'])")"
+if [ "$FORCE" -eq 0 ] && [ -f "$RUNTIME/VERSION" ] && [ -f "$RUNTIME/scripts/jev_route.py" ]; then
+  INSTALLED_VERSION="$(cat "$RUNTIME/VERSION")"
+  if [ "$INSTALLED_VERSION" = "$SRC_VERSION" ]; then
+    echo "ClearJev is already downloaded (v$INSTALLED_VERSION at $RUNTIME)."
+    echo "Re-running without --force changes nothing (routing state preserved)."
+    echo "Use '$0 --force' to reinstall, or 'clearjev status' to verify."
+    python3 "$RUNTIME/scripts/jev_route.py" status || true
+    exit 0
+  fi
+  echo "Installed v$INSTALLED_VERSION found, source is v$SRC_VERSION — upgrading."
+fi
 SKILL1="$CODEX_HOME/skills/clearjev"
 SKILL2="$HOME/.agents/skills/clearjev"
 PROMPTS="$CODEX_HOME/prompts"
@@ -31,7 +50,8 @@ BIN="$HOME/.local/bin"
 mkdir -p "$CODEX_HOME" "$BIN" "$PROMPTS"
 rm -rf "$RUNTIME"
 cp -R "$SRC" "$RUNTIME"
-echo "runtime -> $RUNTIME"
+printf '%s\n' "$SRC_VERSION" > "$RUNTIME/VERSION"
+echo "runtime -> $RUNTIME (v$SRC_VERSION)"
 
 for dest in "$SKILL1" "$SKILL2"; do
   mkdir -p "$(dirname "$dest")"
@@ -88,7 +108,15 @@ with open(path, "w", encoding="utf-8") as f:
 print("hook -> " + path)
 PY
 
-if [ -z "${TYPESAFE_API_KEY:-}" ] && [ -r /dev/tty ]; then
+# Prompt for the key only when a real terminal answers (readable AND
+# openable — `[ -r /dev/tty ]` alone is true even with no controlling
+# terminal, which broke non-interactive installs). The probe runs in a
+# subshell so a failed open can never trip `set -eu` in the parent.
+can_prompt=0
+if [ -z "${TYPESAFE_API_KEY:-}" ]; then
+  if ( : </dev/tty ) 2>/dev/null; then can_prompt=1; fi
+fi
+if [ "$can_prompt" -eq 1 ]; then
   echo ""
   echo "ClearJev sends prompt text and limited repository metadata to TypeSafe when Jev is enabled."
   echo "Get a key at https://console.typesafe.ai/keys, or press Enter for local heuristic fallback."
@@ -108,7 +136,9 @@ fi
 echo ""
 python3 "$RUNTIME/scripts/jev_route.py" status
 echo ""
-echo "Installed. Restart Codex, trust ClearJev in /hooks, then open a new chat."
+echo "Installed and active by default (routing ON unless you turned it off"
+echo "before — that state is preserved). Pause anytime: clearjev off."
+echo "Restart Codex, trust ClearJev in /hooks, then open a new chat."
 echo "Chat: use \$clearjev with on/off/status/models/key actions."
 echo "Deprecated aliases: /prompts:clearjev, /prompts:clearjev-on, /prompts:clearjev-off."
 echo "Shell: $BIN/clearjev status"

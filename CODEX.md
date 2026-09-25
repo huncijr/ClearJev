@@ -23,7 +23,9 @@ Why: ...
 If the block says `heuristic fallback`, Jev was unavailable — the header
 names the exact reason (`API key missing`, `API key rejected`, `Jev
 temporarily unavailable`, `Jev network timeout`, `Jev response error`).
-Treat fallback output as a rough hint, not a confident judgment.
+Treat fallback output as a rough hint, not a confident judgment. If the
+header says `Jev paused after 3 failures`, Jev calls are paused until the
+key is fixed and `clearjev check` passes — tell the user exactly that.
 
 ## 2. Obey the routing block
 

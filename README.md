@@ -38,6 +38,10 @@ curl -fsSL https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clear
 irm https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.ps1 | iex
 ```
 
+The installer is idempotent: re-running it detects the installed version
+and stops with `ClearJev is already downloaded` (routing state preserved);
+use `install.sh --force` (or `-Force` on Windows) to reinstall.
+
 The installer copies a self-contained runtime to
 `~/.codex/clearjev-runtime`, installs the discoverable `clearjev` skill
 (`~/.codex/skills` + `~/.agents/skills`), registers the `UserPromptSubmit`
@@ -50,7 +54,10 @@ no config feature flags are written.
 asks once and stores it owner-only in `~/.codex/clearjev/credentials.json`
 (never in shell profiles, never echoed). Without a key the layer still works
 (labeled heuristic fallback) — with a key it uses Jev judgments with
-confidence gating. When Jev is enabled, prompt text plus limited repository
+confidence gating. A missing or rejected key never loops forever: after 3
+consecutive Jev failures the hook pauses Jev calls and says so in the
+block (`Jev paused after 3 failures ... run `clearjev check``); a new key
+or a passing `clearjev check` resumes them. When Jev is enabled, prompt text plus limited repository
 metadata (top-level filenames, dirty git status) is sent to TypeSafe; the
 installer discloses this before asking.
 
@@ -235,7 +242,7 @@ plugins/clearjev-router/
   scripts/install.sh / install.ps1 / uninstall.sh / uninstall.ps1
   assets/router-config.json      # THE config: endpoint, weights, thresholds, model profiles
   references/                    # question definitions, routing rules, model notes
-tests/test_router.py             # 52 tests, no network needed
+tests/test_router.py             # 63 tests, no network needed
 ```
 
 ## How routing works

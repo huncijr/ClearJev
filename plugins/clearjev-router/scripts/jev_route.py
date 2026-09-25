@@ -265,6 +265,50 @@ def get_api_key():
 
 # ---------------------------------------------------------------- Jev call
 
+JEV_MAX_FAILURES = 3  # consecutive Jev errors before calls pause
+
+
+def jev_health():
+    """Consecutive-failure tracker, persisted in the user config."""
+    data = user_config()
+    health = data.get("jev_health")
+    return health if isinstance(health, dict) else {}
+
+
+def jev_note_success():
+    data = user_config()
+    if "jev_health" in data:
+        data["jev_health"] = {"failures": 0, "last_error": ""}
+        try:
+            write_private_json(config_path(), data)
+        except OSError:
+            pass
+
+
+def jev_note_failure(detail):
+    data = user_config()
+    health = data.get("jev_health")
+    if not isinstance(health, dict):
+        health = {}
+    try:
+        failures = int(health.get("failures", 0) or 0) + 1
+    except (TypeError, ValueError):
+        failures = 1
+    data["jev_health"] = {"failures": failures,
+                          "last_error": str(detail)[:200]}
+    try:
+        write_private_json(config_path(), data)
+    except OSError:
+        pass
+    return failures
+
+
+def jev_circuit_open():
+    try:
+        return int(jev_health().get("failures", 0) or 0) >= JEV_MAX_FAILURES
+    except (TypeError, ValueError):
+        return False
+
 def build_questions():
     """The 11-question batch (see references/jev-questions.md)."""
     return {
@@ -748,6 +792,19 @@ def status():
     print("- host: " + ("CLI" if is_cli_host()
                         else "non-CLI (" + host_origin() + ") — routing disabled here"))
     print("- routing: " + ("OFF (" + reason + ")" if disabled else "ON"))
+    health = jev_health()
+    failures = 0
+    try:
+        failures = int(health.get("failures", 0) or 0)
+    except (TypeError, ValueError):
+        pass
+    if failures >= JEV_MAX_FAILURES:
+        print("- jev: PAUSED after %d failures (last: %s)" % (
+            failures, health.get("last_error") or "?"))
+        print("  fix the key, then run `clearjev check` to resume Jev calls")
+    elif failures:
+        print("- jev: %d consecutive failure(s) (last: %s)" % (
+            failures, health.get("last_error") or "?"))
     print("- auto-switch: " + ("ON" if auto_switch_enabled() else "OFF"))
     print("- switch endpoint: " + app_server_sock())
     print("- state file: " + state_path())
@@ -845,6 +902,7 @@ def set_api_key(value):
         return False, "API key must not be empty"
     try:
         write_private_json(credentials_path(), {"api_key": value})
+        jev_note_success()  # new key, fresh start for the circuit breaker
         return True, credentials_path()
     except OSError as exc:
         return False, str(exc)
@@ -1006,15 +1064,28 @@ def route_prompt(prompt, cwd, current_model=""):
     api_key = get_api_key()
     decision = None
     error = None
+    circuit_paused = False
     if api_key:
-        try:
-            response = call_jev(state, api_key)
-            decision = route_from_jev(response.get("answers", {}))
-        except Exception as exc:
-            error = exc
+        if jev_circuit_open():
+            circuit_paused = True
+        else:
+            try:
+                response = call_jev(state, api_key)
+                decision = route_from_jev(response.get("answers", {}))
+                jev_note_success()
+            except Exception as exc:
+                error = exc
+                jev_note_failure(fallback_reason(exc))
     if decision is None:
         decision = heuristic_route(prompt, repo_meta)
-        decision["fallback_reason"] = fallback_reason(error)
+        if circuit_paused:
+            health = jev_health()
+            decision["fallback_reason"] = (
+                "Jev paused after %d failures (last: %s) — fix the key, "
+                "then run `clearjev check`" % (
+                    JEV_MAX_FAILURES, health.get("last_error") or "?"))
+        else:
+            decision["fallback_reason"] = fallback_reason(error)
     decision["current_model"] = current_model
     return decision
 
@@ -1366,11 +1437,14 @@ def check():
                 {"prompt": {"text": "Explain what a hook does."}, "repo": {}},
                 key)
             print("- jev ping: ok (" + resp.get("model", "?") + ")")
+            jev_note_success()  # manual probe passed: reset the circuit
         except urllib.error.HTTPError as exc:
             print("- jev ping: HTTP " + str(exc.code) + " (check key)")
+            jev_note_failure("jev ping HTTP " + str(exc.code))
             ok = False
         except Exception as exc:
             print("- jev ping: failed (" + str(exc) + ")")
+            jev_note_failure("jev ping failed: " + type(exc).__name__)
             ok = False
     # routing smoke test (no network)
     demo = heuristic_route("Add a dark mode toggle to the settings page.", {})

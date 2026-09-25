@@ -1,6 +1,7 @@
 """ClearJev router tests — stdlib unittest, no network, no API key needed."""
 import json
 import os
+import urllib.error as urllib_error
 import subprocess
 import sys
 import tempfile
@@ -374,6 +375,154 @@ def switch_decision(model="gpt-5.6-luna", current="gpt-5.6-sol"):
             "validation": "none", "uncertain": False,
             "reasons": ["explain task"], "source": "jev",
             "current_model": current}
+
+
+def _module_env(tmp):
+    import tempfile as _tf
+    d = _tf.mkdtemp(prefix="clearjev-cb-")
+    creds = __import__("os").path.join(d, "creds.json")
+    with open(creds, "w") as f:
+        __import__("json").dump({"api_key": "test-key"}, f)
+    return {"CLEARJEV_CONFIG": __import__("os").path.join(d, "config.json"),
+            "CLEARJEV_STATE": __import__("os").path.join(d, "config.json"),
+            "CLEARJEV_CREDENTIALS": creds,
+            "CLEARJEV_MODELS_CACHE": __import__("os").path.join(d, "no-models.json")}
+
+
+class TestCircuitBreaker(unittest.TestCase):
+    """Bad keys stop burning Jev calls after a few tries, with notice."""
+
+    def test_opens_after_three_failures(self):
+        mod = load_router_module()
+        env = _module_env(None)
+        old = dict(os.environ)
+        os.environ.update(env)
+        calls = []
+        def failing(state, key):
+            calls.append(1)
+            raise urllib_error.URLError("down") if False else TimeoutError("down")
+        mod.call_jev = failing
+        try:
+            reasons = []
+            for _ in range(4):
+                decision = mod.route_prompt("Explain x.", "/tmp")
+                reasons.append(decision["fallback_reason"])
+            self.assertEqual(len(calls), 3)
+            for r in reasons[:3]:
+                self.assertNotIn("paused", r)
+            self.assertIn("Jev paused after 3 failures", reasons[3])
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+
+    def test_paused_reason_names_fix(self):
+        mod = load_router_module()
+        env = _module_env(None)
+        old = dict(os.environ)
+        os.environ.update(env)
+        def failing(state, key):
+            raise TimeoutError("down")
+        mod.call_jev = failing
+        try:
+            for _ in range(3):
+                mod.route_prompt("Explain x.", "/tmp")
+            decision = mod.route_prompt("Explain x.", "/tmp")
+            self.assertIn("Jev paused after 3 failures", decision["fallback_reason"])
+            self.assertIn("clearjev check", decision["fallback_reason"])
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+
+    def test_success_resets_circuit(self):
+        mod = load_router_module()
+        env = _module_env(None)
+        old = dict(os.environ)
+        os.environ.update(env)
+        def failing(state, key):
+            raise TimeoutError("down")
+        mod.call_jev = failing
+        try:
+            for _ in range(3):
+                mod.route_prompt("Explain x.", "/tmp")
+            self.assertTrue(mod.jev_circuit_open())
+            ok, _ = mod.set_api_key("fixed-key")
+            self.assertTrue(ok)
+            mod.call_jev = lambda state, key: {"answers": {}}
+            decision = mod.route_prompt("Explain x.", "/tmp")
+            self.assertEqual(decision["source"], "jev")
+            self.assertFalse(mod.jev_circuit_open())
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+
+    def test_key_set_resets_circuit(self):
+        mod = load_router_module()
+        env = _module_env(None)
+        old = dict(os.environ)
+        os.environ.update(env)
+        try:
+            mod.jev_note_failure("bad")
+            mod.jev_note_failure("bad")
+            mod.jev_note_failure("bad")
+            self.assertTrue(mod.jev_circuit_open())
+            ok, _ = mod.set_api_key("brand-new-key")
+            self.assertTrue(ok)
+            self.assertFalse(mod.jev_circuit_open())
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+
+    def test_status_reports_paused(self):
+        mod = load_router_module()
+        env = _module_env(None)
+        old = dict(os.environ)
+        os.environ.update(env)
+        try:
+            mod.jev_note_failure("HTTP 401")
+            mod.jev_note_failure("HTTP 401")
+            mod.jev_note_failure("HTTP 401")
+            import io
+            from contextlib import redirect_stdout
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                mod.status()
+            self.assertIn("PAUSED after 3 failures", buf.getvalue())
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+
+
+class TestInstallerIdempotent(unittest.TestCase):
+    """Second install says already-downloaded; --force reinstalls."""
+
+    def test_already_downloaded(self):
+        import tempfile as _tf
+        home = _tf.mkdtemp(prefix="clearjev-inst-")
+        codex = os.path.join(home, "codex")
+        repo = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+        base = dict(os.environ)
+        base["HOME"] = home
+        base["CODEX_HOME"] = codex
+        base["PLUGIN_SRC"] = os.path.join(
+            repo, "plugins", "clearjev-router")
+        base["TYPESAFE_API_KEY"] = ""
+        script = os.path.join(
+            repo, "plugins", "clearjev-router", "scripts", "install.sh")
+        first = subprocess.run(
+            ["sh", script], capture_output=True, text=True, timeout=120,
+            cwd="/tmp", env=base)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn("cli self-check: OK", first.stdout)
+        second = subprocess.run(
+            ["sh", script], capture_output=True, text=True, timeout=120,
+            cwd="/tmp", env=base)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("already downloaded", second.stdout)
+        third = subprocess.run(
+            ["sh", script, "--force"], capture_output=True, text=True,
+            timeout=120, cwd="/tmp", env=base)
+        self.assertEqual(third.returncode, 0, third.stderr)
+        self.assertNotIn("already downloaded", third.stdout)
 
 
 class TestHostScope(unittest.TestCase):
