@@ -178,7 +178,8 @@ the router loads it at startup).
 | Normal prompt, routing ON | Hook routes with Jev, switches the thread (`thread/settings/update`), waits for confirmation, then the answer comes from the new model |
 | Switch confirmed | Block says `Switched this session to <model> (<effort>)` |
 | Already the right model | Block says `Already on <model>; no switch needed` |
-| Switch rejected/unavailable | Block says `Switch failed (<reason>)`; session continues with its previous model |
+| Switch rejected/unavailable | Block says `Switch failed (<reason>)` or `Switch unavailable in this host`; session continues with its previous model |
+| Desktop App thread not visible locally | The App runs its own private app-server, so the hook stays advisory there: follow the recommendation with native `/model` |
 | Already-generating turn | Cannot be re-targeted mid-stream; the switch applies from that point on |
 | `clearjev autoswitch off` / `off` | No switching; hook stays advisory-only |
 | New CLI session with Jev's pick | `clearjev run '<prompt>'` (routes, then `codex --model <slug> -c model_reasoning_effort=<level>`) |
@@ -227,7 +228,7 @@ plugins/clearjev-router/
   scripts/install.sh / install.ps1 / uninstall.sh / uninstall.ps1
   assets/router-config.json      # THE config: endpoint, weights, thresholds, model profiles
   references/                    # question definitions, routing rules, model notes
-tests/test_router.py             # 44 tests, no network needed
+tests/test_router.py             # 47 tests, no network needed
 ```
 
 ## How routing works

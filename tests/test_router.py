@@ -439,6 +439,50 @@ class TestAutoSwitch(unittest.TestCase):
                           env_extra={"CLEARJEV_STATE": state})
         self.assertIn("ON", proc.stdout)
 
+    def test_unavailable_thread_stays_advisory(self):
+        mod = load_router_module()
+        self.assertTrue(mod.classify_unavailable("thread not found: abc"))
+        self.assertTrue(mod.classify_unavailable("Thread Not Found"))
+        self.assertFalse(mod.classify_unavailable("handshake refused"))
+        self.assertFalse(mod.classify_unavailable(""))
+        mod.rpc_thread_settings = lambda *a, **k: (False, "thread not found: abc")
+        decision = switch_decision()
+        mod.maybe_switch(decision, "abc")
+        self.assertTrue(decision["switch"].startswith("unavailable"))
+        rendered = mod.render(decision)
+        self.assertIn("Switch unavailable in this host", rendered)
+        self.assertIn("use /model", rendered)
+        self.assertNotIn("Switched this session", rendered)
+
+    def test_retry_only_on_transient(self):
+        mod = load_router_module()
+        calls = []
+        def flaky(*a, **k):
+            calls.append(1)
+            if len(calls) == 1:
+                return False, "no settings response", True
+            return True, "confirmed", False
+        mod._update_once = flaky
+        ok, detail = mod.rpc_thread_settings("tid", "m", "low", timeout=10)
+        self.assertTrue(ok)
+        self.assertEqual(len(calls), 2)
+        calls.clear()
+        def deterministic(*a, **k):
+            calls.append(1)
+            return False, "thread not found", False
+        mod._update_once = deterministic
+        ok, detail = mod.rpc_thread_settings("tid", "m", "low", timeout=10)
+        self.assertFalse(ok)
+        self.assertEqual(len(calls), 1)
+
+    def test_endpoint_override_env(self):
+        mod = load_router_module()
+        os.environ["CLEARJEV_APP_SERVER_SOCK"] = "/tmp/cj-custom.sock"
+        try:
+            self.assertEqual(mod.app_server_endpoints(), ["/tmp/cj-custom.sock"])
+        finally:
+            del os.environ["CLEARJEV_APP_SERVER_SOCK"]
+
     def test_autoswitch_off_disables_switch(self):
         mod = load_router_module()
         import tempfile as _tf

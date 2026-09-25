@@ -76,5 +76,8 @@ The hook switches the session model itself through the local Codex
 app-server (`thread/settings/update`) and reports `Switched this session to
 <model>` only after the switch is confirmed. If the block says `Switch
 failed`, the session kept its previous model — say so honestly and offer
-`/model` or `clearjev run`. `clearjev autoswitch off` (or `clearjev off`)
+`/model` or `clearjev run`. If it says `Switch unavailable in this host`
+(typical in the Desktop App, which runs its own private app-server), the
+thread is not visible to the local daemon: report the recommendation and
+switch natively with `/model`. `clearjev autoswitch off` (or `clearjev off`)
 disables switching; the hook then stays advisory-only.

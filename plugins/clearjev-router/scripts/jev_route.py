@@ -686,6 +686,10 @@ def render(decision):
         body += "\nAlready on %s; no switch needed." % decision["model"]
     elif switch.startswith("failed"):
         body += "\nSwitch failed (%s); continuing with %s." % (switch[7:].strip(), current)
+    elif switch.startswith("unavailable"):
+        body += ("\nSwitch unavailable in this host (%s); use /model to switch, "
+                 "or `clearjev run` for a pre-routed CLI session."
+                 % switch[12:].strip())
     why = "Why: " + "; ".join(decision["reasons"]) + "."
     if decision["uncertain"]:
         why += (" If intent looks wrong, reply 'reroute: <what it really is>' "
@@ -743,6 +747,7 @@ def status():
     print("ClearJev status")
     print("- routing: " + ("OFF (" + reason + ")" if disabled else "ON"))
     print("- auto-switch: " + ("ON" if auto_switch_enabled() else "OFF"))
+    print("- switch endpoint: " + app_server_sock())
     print("- state file: " + state_path())
     print("- TYPESAFE_API_KEY: " + ("set" if key else "MISSING (heuristic fallback)"))
     print("- models: " + str(len(active_profiles())) + " enabled / "
@@ -942,16 +947,24 @@ def route_prompt(prompt, cwd, current_model=""):
 # payload's `session_id` is the app-server thread id. Every failure falls
 # back to advisory-only output; the session is never broken.
 
-def app_server_sock():
+def app_server_endpoints():
+    """Candidate app-server control sockets, in priority order.
+
+    The CLI daemon publishes ~/.codex/app-server-control/app-server-control.sock.
+    The Desktop App runs its own app-server over private stdio pipes with no
+    socket on disk, so App threads are not visible here: updates to them come
+    back as 'thread not found' and stay advisory-only. The list is ordered so
+    future App-published sockets can be prepended without logic changes.
+    """
     override = os.environ.get("CLEARJEV_APP_SERVER_SOCK")
     if override:
-        return override
-    path = os.path.join(codex_home(), "app-server-control",
-                        "app-server-control.sock")
-    try:
-        return os.path.realpath(path)
-    except OSError:
-        return path
+        return [override]
+    return [os.path.join(codex_home(), "app-server-control",
+                         "app-server-control.sock")]
+
+
+def app_server_sock():
+    return app_server_endpoints()[0]
 
 
 def _ws_send(sock, obj):
@@ -1010,17 +1023,15 @@ def _ws_recv(sock, deadline, want_id=None):
     return None
 
 
-def rpc_thread_settings(thread_id, model, effort, timeout=APP_SERVER_TIMEOUT):
-    """Override model+effort for subsequent turns. Returns (ok, detail)."""
+def _update_once(sock_path, thread_id, model, effort, deadline):
+    """Single settings-update attempt. Returns (ok, detail, transient)."""
     import base64
     import socket as socket_mod
-    import time
-    deadline = time.time() + timeout
     sock = None
     try:
         sock = socket_mod.socket(socket_mod.AF_UNIX, socket_mod.SOCK_STREAM)
         sock.settimeout(5)
-        sock.connect(app_server_sock())
+        sock.connect(os.path.realpath(sock_path))
         key = base64.b64encode(os.urandom(16)).decode("ascii")
         sock.sendall(("GET / HTTP/1.1\r\nHost: localhost\r\n"
                       "Upgrade: websocket\r\nConnection: Upgrade\r\n"
@@ -1030,38 +1041,74 @@ def rpc_thread_settings(thread_id, model, effort, timeout=APP_SERVER_TIMEOUT):
         while b"\r\n\r\n" not in head:
             chunk = sock.recv(4096)
             if not chunk:
-                return False, "handshake closed"
+                return False, "handshake closed", True
             head += chunk
         if b"101" not in head.split(b"\r\n")[0]:
-            return False, "handshake refused"
+            return False, "handshake refused", True
         _ws_send(sock, {"id": 0, "method": "initialize",
                         "params": {"clientInfo": {"name": "clearjev",
                                                  "title": "ClearJev",
-                                                 "version": "0.2.0"},
+                                                 "version": "0.3.0"},
                                    "capabilities": {"experimentalApi": True}}})
         if _ws_recv(sock, deadline, want_id=0) is None:
-            return False, "no initialize response"
+            return False, "no initialize response", True
         _ws_send(sock, {"method": "initialized", "params": {}})
         _ws_send(sock, {"id": 1, "method": "thread/settings/update",
                         "params": {"threadId": thread_id, "model": model,
                                    "effort": effort}})
         resp = _ws_recv(sock, deadline, want_id=1)
         if resp is None:
-            return False, "no settings response"
+            return False, "no settings response", True
         if isinstance(resp.get("result"), dict):
-            return True, "confirmed"
+            return True, "confirmed", False
         err = resp.get("error") or {}
-        return False, str(err.get("message") or err.get("code") or "rejected")
+        detail = str(err.get("message") or err.get("code") or "rejected")
+        return False, detail, False
     except FileNotFoundError:
-        return False, "no app-server socket (is Codex running?)"
+        return False, "no app-server socket (is Codex running?)", False
     except Exception as exc:
-        return False, type(exc).__name__
+        return False, type(exc).__name__, True
     finally:
         try:
             if sock is not None:
                 sock.close()
         except Exception:
             pass
+
+
+def classify_unavailable(detail):
+    """True when the thread is not visible to this app-server instance.
+
+    The Desktop App runs its own app-server over private pipes, so its
+    threads answer 'thread not found' here even with a correct id.
+    """
+    return "not found" in (detail or "").lower()
+
+
+def rpc_thread_settings(thread_id, model, effort, timeout=APP_SERVER_TIMEOUT):
+    """Override model+effort for subsequent turns. Returns (ok, detail).
+
+    One retry on transient transport failures only; deterministic server
+    rejections (unknown thread, invalid id) are returned immediately.
+    """
+    import time
+    deadline = time.time() + timeout
+    last = (False, "no app-server endpoint")
+    for endpoint in app_server_endpoints():
+        ok, detail, transient = _update_once(endpoint, thread_id, model,
+                                             effort, deadline)
+        if ok:
+            return True, detail
+        last = (False, detail)
+        if transient and time.time() < deadline:
+            ok2, detail2, _ = _update_once(endpoint, thread_id, model,
+                                           effort, deadline)
+            if ok2:
+                return True, detail2
+            last = (False, detail2)
+        if time.time() >= deadline:
+            break
+    return last
 
 
 def auto_switch_enabled():
@@ -1088,7 +1135,12 @@ def maybe_switch(decision, session_id):
         return
     ok, detail = rpc_thread_settings(session_id, decision["model"],
                                      decision["reasoning"])
-    decision["switch"] = "done" if ok else "failed: " + detail
+    if ok:
+        decision["switch"] = "done"
+    elif classify_unavailable(detail):
+        decision["switch"] = "unavailable: " + detail
+    else:
+        decision["switch"] = "failed: " + detail
 
 
 def run_command(args):

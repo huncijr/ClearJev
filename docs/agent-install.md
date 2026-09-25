@@ -92,11 +92,12 @@ Chat control checks: `$clearjev off` (next prompt: no routing block),
 ## 7. CLI vs App differences
 
 - CLI: automatic switching works through the local app-server daemon.
-- Desktop App: the App runs its own app-server process, so a switch can
-  fail with `thread not found` or socket errors. In that case the hook
-  stays advisory: report the recommended model and switch natively with
-  `/model`. `clearjev run '<prompt>'` (CLI) remains the guaranteed
-  pre-routed path.
+- Desktop App: the App runs its own app-server over private pipes with no
+  socket on disk, so its threads answer `thread not found` on the local
+  daemon. The hook detects this and reports
+  `Switch unavailable in this host ... use /model` instead of a bogus
+  failure: follow the recommendation with native `/model`.
+  `clearjev run '<prompt>'` (CLI) remains the guaranteed pre-routed path.
 
 ## 8. If it does not work (check in order)
 
