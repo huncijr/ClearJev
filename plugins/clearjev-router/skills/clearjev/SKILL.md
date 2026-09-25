@@ -61,6 +61,7 @@ return its output. Do not reimplement state changes by editing JSON manually.
 - Add reasoning levels: `clearjev models reasoning <slug> add high,xhigh`
 - Remove reasoning levels: `clearjev models reasoning <slug> remove max,ultra`
 - Start a routed CLI session: `clearjev run '<prompt>'`
+- Auto-switch control: `clearjev autoswitch on|off|status`
 
 If `clearjev` is unavailable, run the router at
 `~/.codex/clearjev-runtime/scripts/jev_route.py` with `python3` (or `py -3` on
@@ -71,7 +72,9 @@ API keys typed into chat become part of chat history. Warn once and recommend
 `clearjev key set '<key>'` in a private terminal; if the user explicitly wants
 chat setup, execute it without printing the key back.
 
-The hook can recommend a model but cannot mutate the model of the turn already
-being submitted. In an existing Codex session, tell the user to use `/model` for
-the native same-session switch. `clearjev run` starts a new, pre-routed CLI
-session. Never claim that advisory hook output changed the active model.
+The hook switches the session model itself through the local Codex
+app-server (`thread/settings/update`) and reports `Switched this session to
+<model>` only after the switch is confirmed. If the block says `Switch
+failed`, the session kept its previous model — say so honestly and offer
+`/model` or `clearjev run`. `clearjev autoswitch off` (or `clearjev off`)
+disables switching; the hook then stays advisory-only.

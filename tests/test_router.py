@@ -359,6 +359,106 @@ class TestRunCommand(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
 
 
+def load_router_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("jev_route_under_test", HOOK)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def switch_decision(model="gpt-5.6-luna", current="gpt-5.6-sol"):
+    return {"intent": "explain", "intent_conf": 1.0, "complexity": 15,
+            "band": "trivial", "mean_conf": 1.0, "model": model,
+            "reasoning": "low", "planning": "none", "repo": "unnecessary",
+            "validation": "none", "uncertain": False,
+            "reasons": ["explain task"], "source": "jev",
+            "current_model": current}
+
+
+class TestAutoSwitch(unittest.TestCase):
+    """Same-thread switch: success, failure, and opt-out paths."""
+
+    def test_already_on_same_model(self):
+        mod = load_router_module()
+        decision = switch_decision(model="gpt-5.6-sol", current="gpt-5.6-sol")
+        mod.maybe_switch(decision, "any-session")
+        self.assertEqual(decision["switch"], "already")
+        self.assertIn("no switch needed", mod.render(decision))
+
+    def test_unknown_current_model_stays_advisory(self):
+        mod = load_router_module()
+        decision = switch_decision(current="unknown")
+        mod.maybe_switch(decision, "any-session")
+        self.assertEqual(decision["switch"], "already")
+        self.assertNotIn("Switched", mod.render(decision))
+
+    def test_success_marks_switched(self):
+        mod = load_router_module()
+        mod.rpc_thread_settings = lambda *a, **k: (True, "confirmed")
+        decision = switch_decision()
+        mod.maybe_switch(decision, "session-123")
+        self.assertEqual(decision["switch"], "done")
+        self.assertIn("Switched this session to gpt-5.6-luna (low)",
+                      mod.render(decision))
+
+    def test_failure_stays_honest(self):
+        mod = load_router_module()
+        mod.rpc_thread_settings = lambda *a, **k: (False, "boom")
+        decision = switch_decision()
+        mod.maybe_switch(decision, "session-123")
+        self.assertEqual(decision["switch"], "failed: boom")
+        self.assertIn("Switch failed (boom)", mod.render(decision))
+        self.assertNotIn("Switched this session", mod.render(decision))
+
+    def test_missing_socket_fails_open(self):
+        # Invalid id against a live daemon, or missing socket without one:
+        # either way a clean (False, detail) pair, never an exception.
+        mod = load_router_module()
+        ok, detail = mod.rpc_thread_settings("s", "m", "low", timeout=5)
+        self.assertFalse(ok)
+        self.assertIsInstance(detail, str)
+        self.assertTrue(detail)
+
+    def test_no_session_id_skips_rpc(self):
+        mod = load_router_module()
+        calls = []
+        mod.rpc_thread_settings = lambda *a, **k: calls.append(a) or (True, "x")
+        decision = switch_decision()
+        mod.maybe_switch(decision, "")
+        self.assertEqual(calls, [])
+        self.assertTrue(decision["switch"].startswith("failed"))
+
+    def test_autoswitch_command_roundtrip(self):
+        proc, state = run_cli("autoswitch", "off")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("OFF", proc.stdout)
+        proc, _ = run_cli("autoswitch", env_extra={"CLEARJEV_STATE": state})
+        self.assertIn("OFF", proc.stdout)
+        proc, _ = run_cli("autoswitch", "on",
+                          env_extra={"CLEARJEV_STATE": state})
+        self.assertIn("ON", proc.stdout)
+
+    def test_autoswitch_off_disables_switch(self):
+        mod = load_router_module()
+        import tempfile as _tf
+        tmp = _tf.mkdtemp(prefix="clearjev-asw-")
+        cfg = os.path.join(tmp, "config.json")
+        with open(cfg, "w") as f:
+            json.dump({"auto_switch": False}, f)
+        os.environ["CLEARJEV_CONFIG"] = cfg
+        try:
+            self.assertFalse(mod.auto_switch_enabled())
+            calls = []
+            mod.rpc_thread_settings = lambda *a, **k: calls.append(a) or (True, "x")
+            decision = switch_decision()
+            mod.maybe_switch(decision, "session-123")
+            self.assertEqual(calls, [])
+            self.assertIn("auto-switch disabled", decision["switch"])
+        finally:
+            del os.environ["CLEARJEV_CONFIG"]
+
+
 class TestPackaging(unittest.TestCase):
     ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..",
                                          "plugins", "clearjev-router"))

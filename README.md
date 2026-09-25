@@ -8,18 +8,21 @@
 > own API key.
 
 Advisory pre-prompt routing layer for Codex, built on the **TypeSafe Jev API**
-(System One judgments).
+(System One judgments) — with real same-thread model switching.
 
 Every prompt is judged **before** it reaches the model: Jev returns typed
 `Choice` / `Score` / `Noul` answers (intent, demands, risk), code composes a
-recommendation, and a short block (recommended model, current model,
-reasoning, planning, validation + reasons) is injected as developer context.
-Then execution continues normally.
+decision, and the hook switches the session to the chosen model through the
+local Codex app-server before answering. A short block (recommended model,
+switch confirmation, reasoning, planning, validation + reasons) is injected
+as developer context. Then execution continues normally.
 
-Scope truth, read first: the hook **recommends** — it cannot change the model
-of the session that is already running. Switch that session natively with
-`/model`, or start a pre-routed CLI session with `clearjev run`. Anything
-that claims otherwise is a bug in these docs.
+Scope truth, read first: the switch targets **subsequent turns on the same
+thread** and is confirmed before the answer — the block says `Switched this
+session to <model>` only then. A turn that is already generating cannot be
+re-targeted mid-stream. If the switch fails, the block says `Switch failed
+(<reason>)` and the session continues with its previous model. Anything
+else is a bug in these docs.
 
 ## Install
 
@@ -124,10 +127,12 @@ when asked, and verify a routing block appears.
 ### 3. Shell (outside chat)
 
 ```bash
-clearjev status    # on/off state, key presence, model counts, smoke test
+clearjev status    # on/off state, auto-switch, key presence, model counts, smoke test
 clearjev check     # full verification incl. live Jev ping
 clearjev on        # resume routing (persistent, no restart needed)
 clearjev off       # pause routing (silent no-op, zero cost)
+clearjev autoswitch off  # keep routing advice, never switch the session model
+clearjev autoswitch on   # re-enable automatic switching (default)
 clearjev key set '<key>' | clearjev key unset | clearjev key status
 clearjev models list | clearjev models available
 clearjev models add <slug> --reasoning all|low,medium,...
@@ -168,11 +173,15 @@ the router loads it at startup).
 
 ## Real model switching
 
-| Situation | What works |
+| Situation | What happens |
 |---|---|
-| Same running session, future turns | Native `/model` picker (model + reasoning effort) |
+| Normal prompt, routing ON | Hook routes with Jev, switches the thread (`thread/settings/update`), waits for confirmation, then the answer comes from the new model |
+| Switch confirmed | Block says `Switched this session to <model> (<effort>)` |
+| Already the right model | Block says `Already on <model>; no switch needed` |
+| Switch rejected/unavailable | Block says `Switch failed (<reason>)`; session continues with its previous model |
+| Already-generating turn | Cannot be re-targeted mid-stream; the switch applies from that point on |
+| `clearjev autoswitch off` / `off` | No switching; hook stays advisory-only |
 | New CLI session with Jev's pick | `clearjev run '<prompt>'` (routes, then `codex --model <slug> -c model_reasoning_effort=<level>`) |
-| Already-generating turn | Nothing reliable — in-flight work cannot be re-targeted |
 
 ## Remove
 
@@ -218,7 +227,7 @@ plugins/clearjev-router/
   scripts/install.sh / install.ps1 / uninstall.sh / uninstall.ps1
   assets/router-config.json      # THE config: endpoint, weights, thresholds, model profiles
   references/                    # question definitions, routing rules, model notes
-tests/test_router.py             # 32 tests, no network needed
+tests/test_router.py             # 44 tests, no network needed
 ```
 
 ## How routing works

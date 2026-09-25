@@ -39,6 +39,7 @@ Usage:
 import hashlib
 import json
 import os
+import socket
 import subprocess
 import sys
 import urllib.request
@@ -662,6 +663,9 @@ def heuristic_route(prompt, repo_meta):
 
 # ---------------------------------------------------------------- rendering
 
+APP_SERVER_TIMEOUT = 4.0  # seconds for the model-switch RPC inside the hook
+
+
 def render(decision):
     src = ("ClearJev routing · jev" if decision["source"] == "jev"
            else "ClearJev routing · heuristic fallback · "
@@ -674,14 +678,20 @@ def render(decision):
             "Planning: %s · Validation: %s · Repo: %s"
             % (decision["model"], current, decision["reasoning"],
                decision["planning"], decision["validation"], decision["repo"]))
+    switch = decision.get("switch", "")
+    if switch == "done":
+        body += "\nSwitched this session to %s (%s) before answering." % (
+            decision["model"], decision["reasoning"])
+    elif switch == "already":
+        body += "\nAlready on %s; no switch needed." % decision["model"]
+    elif switch.startswith("failed"):
+        body += "\nSwitch failed (%s); continuing with %s." % (switch[7:].strip(), current)
     why = "Why: " + "; ".join(decision["reasons"]) + "."
     if decision["uncertain"]:
         why += (" If intent looks wrong, reply 'reroute: <what it really is>' "
                 "before editing; prefer a targeted scan over guessing.")
     else:
         why += " If this looks wrong, reply 'reroute: <correction>'."
-    if current != "unknown" and current != decision["model"]:
-        why += " Advisory only: use /model to switch this session."
     return "\n".join((head, body, why))
 
 
@@ -732,6 +742,7 @@ def status():
     key = get_api_key()
     print("ClearJev status")
     print("- routing: " + ("OFF (" + reason + ")" if disabled else "ON"))
+    print("- auto-switch: " + ("ON" if auto_switch_enabled() else "OFF"))
     print("- state file: " + state_path())
     print("- TYPESAFE_API_KEY: " + ("set" if key else "MISSING (heuristic fallback)"))
     print("- models: " + str(len(active_profiles())) + " enabled / "
@@ -923,6 +934,163 @@ def route_prompt(prompt, cwd, current_model=""):
     return decision
 
 
+# ---------------------------------------------------------------- same-thread model switch
+#
+# The hook cannot change the session model by itself, but the local Codex
+# app-server can: experimental `thread/settings/update` overrides the model
+# and reasoning effort for subsequent turns on the same thread. The hook
+# payload's `session_id` is the app-server thread id. Every failure falls
+# back to advisory-only output; the session is never broken.
+
+def app_server_sock():
+    override = os.environ.get("CLEARJEV_APP_SERVER_SOCK")
+    if override:
+        return override
+    path = os.path.join(codex_home(), "app-server-control",
+                        "app-server-control.sock")
+    try:
+        return os.path.realpath(path)
+    except OSError:
+        return path
+
+
+def _ws_send(sock, obj):
+    import struct
+    data = json.dumps(obj).encode("utf-8")
+    mask = os.urandom(4)
+    n = len(data)
+    if n < 126:
+        header = bytes([0x81, 0x80 | n])
+    elif n < 65536:
+        header = bytes([0x81, 0x80 | 126]) + struct.pack(">H", n)
+    else:
+        header = bytes([0x81, 0x80 | 127]) + struct.pack(">Q", n)
+    sock.sendall(header + mask + bytes(
+        b ^ mask[i % 4] for i, b in enumerate(data)))
+
+
+def _ws_recv(sock, deadline, want_id=None):
+    import struct
+    import time
+    buf = b""
+    while time.time() < deadline:
+        sock.settimeout(max(0.1, deadline - time.time()))
+        try:
+            chunk = sock.recv(65536)
+        except (socket.timeout, TimeoutError, OSError):
+            break
+        if not chunk:
+            break
+        buf += chunk
+        while True:
+            if len(buf) < 2:
+                break
+            length = buf[1] & 0x7F
+            idx = 2
+            if length == 126:
+                if len(buf) < 4:
+                    break
+                length = struct.unpack(">H", buf[2:4])[0]
+                idx = 4
+            elif length == 127:
+                if len(buf) < 10:
+                    break
+                length = struct.unpack(">Q", buf[2:10])[0]
+                idx = 10
+            if len(buf) < idx + length:
+                break
+            try:
+                msg = json.loads(buf[idx:idx + length].decode("utf-8"))
+            except ValueError:
+                msg = None
+            buf = buf[idx + length:]
+            if isinstance(msg, dict) and (
+                    want_id is None or msg.get("id") == want_id):
+                return msg
+    return None
+
+
+def rpc_thread_settings(thread_id, model, effort, timeout=APP_SERVER_TIMEOUT):
+    """Override model+effort for subsequent turns. Returns (ok, detail)."""
+    import base64
+    import socket as socket_mod
+    import time
+    deadline = time.time() + timeout
+    sock = None
+    try:
+        sock = socket_mod.socket(socket_mod.AF_UNIX, socket_mod.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect(app_server_sock())
+        key = base64.b64encode(os.urandom(16)).decode("ascii")
+        sock.sendall(("GET / HTTP/1.1\r\nHost: localhost\r\n"
+                      "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                      "Sec-WebSocket-Key: " + key + "\r\n"
+                      "Sec-WebSocket-Version: 13\r\n\r\n").encode("ascii"))
+        head = b""
+        while b"\r\n\r\n" not in head:
+            chunk = sock.recv(4096)
+            if not chunk:
+                return False, "handshake closed"
+            head += chunk
+        if b"101" not in head.split(b"\r\n")[0]:
+            return False, "handshake refused"
+        _ws_send(sock, {"id": 0, "method": "initialize",
+                        "params": {"clientInfo": {"name": "clearjev",
+                                                 "title": "ClearJev",
+                                                 "version": "0.2.0"},
+                                   "capabilities": {"experimentalApi": True}}})
+        if _ws_recv(sock, deadline, want_id=0) is None:
+            return False, "no initialize response"
+        _ws_send(sock, {"method": "initialized", "params": {}})
+        _ws_send(sock, {"id": 1, "method": "thread/settings/update",
+                        "params": {"threadId": thread_id, "model": model,
+                                   "effort": effort}})
+        resp = _ws_recv(sock, deadline, want_id=1)
+        if resp is None:
+            return False, "no settings response"
+        if isinstance(resp.get("result"), dict):
+            return True, "confirmed"
+        err = resp.get("error") or {}
+        return False, str(err.get("message") or err.get("code") or "rejected")
+    except FileNotFoundError:
+        return False, "no app-server socket (is Codex running?)"
+    except Exception as exc:
+        return False, type(exc).__name__
+    finally:
+        try:
+            if sock is not None:
+                sock.close()
+        except Exception:
+            pass
+
+
+def auto_switch_enabled():
+    try:
+        data = user_config()
+        if isinstance(data, dict) and data.get("auto_switch") is False:
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def maybe_switch(decision, session_id):
+    """Attempt the same-thread switch; record the outcome on the decision."""
+    current = decision.get("current_model") or "unknown"
+    if current == "unknown" or current == decision["model"]:
+        decision["switch"] = "already"
+        return
+    if not auto_switch_enabled():
+        decision["switch"] = "failed: auto-switch disabled"
+        return
+    if not session_id:
+        decision["switch"] = "failed: no session id"
+        return
+    ok, detail = rpc_thread_settings(session_id, decision["model"],
+                                     decision["reasoning"])
+    decision["switch"] = "done" if ok else "failed: " + detail
+
+
 def run_command(args):
     dry_run = "--dry-run" in args
     prompt_parts = [arg for arg in args if arg != "--dry-run"]
@@ -966,6 +1134,21 @@ def main(argv):
         return models_command(args[1:])
     if command == "run":
         return run_command(args[1:])
+    if command == "autoswitch":
+        action = args[1].lower() if len(args) > 1 else "status"
+        if action in ("on", "off"):
+            try:
+                data = user_config()
+                data["auto_switch"] = action == "on"
+                write_private_json(config_path(), data)
+                print("ClearJev auto-switch " + action.upper())
+                return 0
+            except OSError as exc:
+                print("Failed: " + str(exc))
+                return 1
+        print("ClearJev auto-switch: " +
+              ("ON" if auto_switch_enabled() else "OFF"))
+        return 0
     if command in ("help", "h") or (not args and sys.stdin.isatty()):
         print("ClearJev: on | off | status | check | key | models | run")
         print("Use 'clearjev models --help' or see README.md for details.")
@@ -1013,7 +1196,9 @@ def main(argv):
         cwd = os.getcwd()
 
     current_model = payload.get("model", "") if isinstance(payload, dict) else ""
+    session_id = payload.get("session_id", "") if isinstance(payload, dict) else ""
     decision = route_prompt(prompt, cwd, current_model)
+    maybe_switch(decision, session_id)
     emit(render(decision))
     return 0
 

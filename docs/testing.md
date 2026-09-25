@@ -42,9 +42,12 @@ recommends, it never switches the session model by itself.
 3. Restart the CLI, trust the hook in `/hooks`
    (`ClearJev routing` / `jev_route.py`, `UserPromptSubmit`), open a **new
    session**.
-4. Send T1–T5 (one per message). Each answer should be preceded by the
-   `ClearJev routing` status and a routing block. With a key the block
-   header says `· jev`; without, `· heuristic fallback · <reason>`.
+4. Send T1–T5 (one per message). Each answer must come from the routed
+   model: the block says `Switched this session to <model>` (or `Already on
+   <model>`), and the session header shows that model. With a key the block
+   header says `· jev`; without, `· heuristic fallback · <reason>`. A
+   `Switch failed (<reason>)` line means the session kept its previous
+   model — that is an honest, valid outcome, not a silent miss.
 5. Exercise the switch — all from chat, no terminal needed. Plain language
    works; explicit commands are shown in parentheses:
    - `$clearjev off` (`kapcsold ki a routingot`) → next prompt: **no** routing status.
@@ -59,6 +62,9 @@ recommends, it never switches the session model by itself.
    - `noroute: T2 text...` → that one prompt skips routing.
    - `reroute: this is actually a refactor` → hook stays silent, the agent
      continues with the corrected intent.
+   - `clearjev autoswitch off` (shell or `$clearjev autoswitch off`) →
+     next routed prompt keeps the session model with no `Switched` line;
+     `autoswitch on` restores switching.
    - `/prompts:clearjev-off` then `/prompts:clearjev-on` → same as the
      `$clearjev` equivalents.
 6. Real model switching:
@@ -102,7 +108,7 @@ before a release:
 1. **Direct hook call (no Codex at all)** — fastest iteration:
    `echo '{"prompt":"...","cwd":"."}' | python3
    plugins/clearjev-router/scripts/jev_route.py`
-2. **Unit tests** — `python3 -m unittest discover -s tests -v` (36 tests,
+2. **Unit tests** — `python3 -m unittest discover -s tests -v` (44 tests,
    no network, hermetic state/catalog/credentials via temp dirs).
 3. **`clearjev status` / `clearjev check`** — on/off state, key presence,
    model counts, live Jev ping + fallback smoke test.
@@ -130,4 +136,4 @@ before a release:
 - `--check` is `OK` with a valid key and honestly reports fallback without one.
 - Uninstall leaves no trace: no status line, no block, no `clearjev` binary
   (key+state gone only with `--purge`/`-Purge`).
-- Unit suite stays 36/36 green after any change.
+- Unit suite stays 44/44 green after any change.

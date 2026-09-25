@@ -1,7 +1,7 @@
 {
   "name": "clearjev-router",
-  "version": "0.2.0",
-  "description": "Advisory pre-prompt routing for Codex: Jev (TypeSafe System One) judges every prompt and recommends a real Codex model plus reasoning effort. Chat control via $clearjev; pre-routed CLI sessions via `clearjev run`.",
+  "version": "0.3.0",
+  "description": "Automatic pre-prompt routing for Codex: Jev (TypeSafe System One) judges every prompt and switches the session to the chosen model plus reasoning effort via the local app-server. Chat control via $clearjev; pre-routed CLI sessions via `clearjev run`.",
   "author": {
     "name": "ClearJev"
   },
@@ -11,7 +11,7 @@
   "skills": "./skills",
   "hooks": "./hooks/hooks.json",
   "interface": {
-    "longDescription": "ClearJev adds an advisory Jev judgment layer to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via the TypeSafe Jev API, then injects a concise recommendation (model, reasoning, planning, validation) as developer context. The hook cannot change the active session model: switch it natively with /model, or start a pre-routed CLI session with `clearjev run`. Manage routing from chat with the $clearjev skill (on/off/status/models/key). ClearJev is an independent open-source project, not affiliated with or endorsed by TypeSafe AI, Inc. Users must provide their own TypeSafe API key.",
+    "longDescription": "ClearJev adds automatic Jev routing to Codex. A UserPromptSubmit hook classifies intent, complexity, risk and repository demand via the TypeSafe Jev API, switches the thread to the chosen model and reasoning effort through the local Codex app-server, and injects a concise confirmation (model, reasoning, planning, validation) as developer context. A switch is reported only after confirmation; failures stay honest advisory output. Manage routing from chat with the $clearjev skill (on/off/status/models/key/autoswitch). ClearJev is an independent open-source project, not affiliated with or endorsed by TypeSafe AI, Inc. Users must provide their own TypeSafe API key.",
     "developerName": "ClearJev",
     "category": "Productivity",
     "defaultPrompt": [
