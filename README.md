@@ -58,7 +58,8 @@ write prompts.
 
 ### 1. Codex CLI chat
 
-After install and restart, the `$clearjev` skill is invokable in chat:
+After install and restart, the `$clearjev` skill is invokable in chat.
+Always add the action — a bare `$clearjev` only gets you a numbered menu:
 
 ```
 $clearjev status
@@ -75,7 +76,8 @@ $clearjev key set '<paste-key-here>'
 $clearjev run 'Implement Stripe subscriptions with webhooks'
 ```
 
-Deprecated-but-working CLI/IDE aliases (installed as `~/.codex/prompts/*.md`):
+Deprecated-but-working CLI/IDE aliases (installed as `~/.codex/prompts/*.md`).
+These are the one-Enter on/off switches — one action per command, no menu:
 
 ```
 /prompts:clearjev

@@ -47,6 +47,12 @@ cp -f "$RUNTIME/scripts/clearjev" "$BIN/clearjev"
 chmod +x "$BIN/clearjev"
 for prompt in "$RUNTIME"/prompts/*.md; do cp -f "$prompt" "$PROMPTS/$(basename "$prompt")"; done
 echo "chat prompts -> $PROMPTS"
+# Self-check: the installed wrapper must reach a working router.
+if "$BIN/clearjev" status >/dev/null 2>&1; then
+  echo "cli self-check: OK ($BIN/clearjev status)"
+else
+  echo "WARNING: $BIN/clearjev status failed — check PATH and reinstall." >&2
+fi
 
 HOOK_CMD="python3 \"$RUNTIME/scripts/jev_route.py\""
 HOOK_CMD="$HOOK_CMD" CODEX_HOME="$CODEX_HOME" python3 - <<'PY'

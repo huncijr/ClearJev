@@ -50,6 +50,12 @@ foreach ($dest in @($skill1, $skill2)) {
 Copy-Item -Force (Join-Path $runtime "scripts/clearjev.cmd") (Join-Path $binDir "clearjev.cmd")
 Copy-Item -Force (Join-Path $runtime "prompts/*.md") $prompts
 Write-Host "chat prompts -> $prompts"
+$installedCli = Join-Path $binDir "clearjev.cmd"
+try {
+  $null = & $installedCli status 2>$null
+  if ($LASTEXITCODE -eq 0) { Write-Host "cli self-check: OK ($installedCli status)" }
+  else { Write-Warning "$installedCli status failed — check PATH and reinstall." }
++} catch { Write-Warning "$installedCli status failed — check PATH and reinstall." }
 # Legacy cleanup (v0.1 layout): wrong-depth skill dir.
 foreach ($legacy in @((Join-Path $codexHome "skills/clearjev-router"), (Join-Path $HOME ".agents/skills/clearjev-router"))) {
 +  if (Test-Path $legacy) { Remove-Item -Recurse -Force $legacy }

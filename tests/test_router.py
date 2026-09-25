@@ -323,8 +323,15 @@ class TestPackaging(unittest.TestCase):
     def test_skill_invocation_name(self):
         with open(os.path.join(self.ROOT, "skills", "clearjev",
                                "SKILL.md")) as f:
-            head = f.read(400)
-        self.assertIn("name: clearjev", head)
+            text = f.read()
+        self.assertIn("name: clearjev", text[:400])
+        # No-action menu: mandatory numbered on/off menu at the top.
+        self.assertIn("No-action menu (mandatory)", text)
+        for item in ("1. on", "2. off", "3. status", "4. key",
+                     "5. models", "6. run"):
+            self.assertIn(item, text)
+        # Picker trigger words in the description.
+        self.assertIn("on/off/status", text.split("---")[1])
 
     def test_prompt_files_have_descriptions(self):
         proms = os.path.join(self.ROOT, "prompts")

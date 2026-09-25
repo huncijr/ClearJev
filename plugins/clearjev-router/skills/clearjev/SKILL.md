@@ -1,9 +1,29 @@
 ---
 name: clearjev
-description: Manage ClearJev routing from chat. Use when the user says ClearJev, asks to turn routing on or off, configure a TypeSafe API key, add or remove routing models, change allowed reasoning levels, inspect status, or launch a routed Codex task.
+description: ClearJev on/off/status switch and router control. Use when the user says ClearJev, $clearjev, or asks to turn routing on or off, check status, configure a TypeSafe API key, add or remove routing models, change allowed reasoning levels, or launch a routed Codex task.
 ---
 
 # ClearJev Control
+
+## No-action menu (mandatory)
+
+If the user's message contains no action word (on, off, status, key,
+models, run), reply with exactly this menu and nothing else:
+
+```
+ClearJev — what should I do?
+1. on — resume routing
+2. off — pause routing
+3. status — show state, key, models
+4. key — API key status / set / remove
+5. models — list / add / remove models and reasoning levels
+6. run — start a pre-routed Codex session
+Reply with a number or a word.
+```
+
+When the reply names an action, execute it immediately.
+
+## Executing actions
 
 Translate the user's request into exactly one ClearJev command, execute it, and
 return its output. Do not reimplement state changes by editing JSON manually.
@@ -27,8 +47,7 @@ return its output. Do not reimplement state changes by editing JSON manually.
 
 If `clearjev` is unavailable, run the router at
 `~/.codex/clearjev-runtime/scripts/jev_route.py` with `python3` (or `py -3` on
-Windows). Ask which action the user wants when they invoke the skill without an
-action. For `models add`, ask for the model slug and whether all or selected
+Windows). For `models add`, ask for the model slug and whether all or selected
 reasoning levels should be enabled.
 
 API keys typed into chat become part of chat history. Warn once and recommend

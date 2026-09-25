@@ -61,8 +61,9 @@ its steps manually one by one with the same effect.
 ## Controlling it from chat (after install)
 
 - Automatic: type nothing special, every prompt gets a routing recommendation.
-- `$clearjev ...` — chat control skill (CLI). With no action it asks what
-  you want: `on`, `off`, `status`, `key`, `models add/remove`, `run`.
+- `$clearjev <action>` — chat control skill (CLI). Always include the action
+  (`on`, `off`, `status`, `key`, `models ...`, `run ...`); a bare `$clearjev`
+  only returns a numbered menu to choose from.
 - `/prompts:clearjev`, `/prompts:clearjev-on`, `/prompts:clearjev-off`,
   `/prompts:clearjev-add`, `/prompts:clearjev-remove`, `/prompts:clearjev-key`
   — deprecated-but-working CLI/IDE aliases for the same actions.
