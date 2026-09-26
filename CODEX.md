@@ -34,6 +34,7 @@ key is fixed and `clearjev check` passes — tell the user exactly that.
   app-server before this turn. `Already on <model>` means no switch was
   needed. Trust the switched model — it was composed in code from typed Jev
   answers, not guessed.
+- If the block says `Kept <model> (gain below switch cost)`, the model stayed to preserve the prompt cache while effort adjusted — this is the intended steady state, not a failure.
 - If the block says `Switch failed (<reason>)`, the session kept the
   previous model: continue with that model, say so in one short line, and
   offer `/model` or `clearjev run '<prompt>'` for a guaranteed routed

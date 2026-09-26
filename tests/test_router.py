@@ -571,6 +571,153 @@ CANNED_JEV = {"model": "jev-1.13.0",
                   "requires_repo": {"type": "noul", "noul": 0.0}}}
 
 
+def _sticky_env():
+    import tempfile as _tf
+    d = _tf.mkdtemp(prefix="clearjev-sticky-")
+    return {"CLEARJEV_CONFIG": d + "/config.json",
+            "CLEARJEV_STATE": d + "/config.json",
+            "CLEARJEV_CREDENTIALS": d + "/creds.json",
+            "CLEARJEV_MODELS_CACHE": d + "/no-models.json",
+            "CLEARJEV_DATA": d + "/data"}
+
+
+def _sticky_decision(model="gpt-5.6-luna", current="gpt-5.6-sol",
+                     complexity=21.0, intent_conf=0.0, mean_conf=0.0,
+                     forced=False):
+    return {"intent": "explain", "intent_conf": intent_conf,
+            "complexity": complexity, "band": "simple",
+            "mean_conf": mean_conf, "model": model, "reasoning": "low",
+            "planning": "light", "repo": "targeted", "validation": "basic",
+            "uncertain": True, "reasons": ["explain task"],
+            "source": "heuristic", "forced": forced,
+            "current_model": current}
+
+
+class TestStickiness(unittest.TestCase):
+    """Switch model only on significant gain; effort always adjusts."""
+
+    def test_low_confidence_keeps_model_adjusts_effort(self):
+        mod = load_router_module()
+        old = _with_env(_sticky_env())
+        calls = []
+        mod.rpc_thread_settings = (
+            lambda tid, model, effort, timeout=4.0:
+            calls.append((model, effort)) or (True, "confirmed"))
+        try:
+            mod.session_remember(
+                "sess-keep",
+                dict(_sticky_decision(model="gpt-5.6-sol", current="gpt-5.6-sol",
+                                      complexity=22.0),
+                     **{"intent": "explain"}),
+                "explain")
+            decision = _sticky_decision()
+            mod.maybe_switch(decision, "sess-keep")
+            self.assertEqual(decision["switch"], "kept")
+            # Effort-only update: model omitted, effort applied.
+            self.assertEqual(calls, [(None, "low")])
+            self.assertIn("Kept gpt-5.6-sol", mod.render(decision))
+        finally:
+            _restore_env(old)
+
+    def test_forced_floor_switches(self):
+        mod = load_router_module()
+        old = _with_env(_sticky_env())
+        calls = []
+        mod.rpc_thread_settings = (
+            lambda tid, model, effort, timeout=4.0:
+            calls.append((model, effort)) or (True, "confirmed"))
+        try:
+            decision = _sticky_decision(model="gpt-5.6-sol",
+                                        current="gpt-5.6-luna",
+                                        complexity=69.0, forced=True)
+            mod.maybe_switch(decision, "sess-force")
+            self.assertEqual(decision["switch"], "done")
+            self.assertEqual(calls[0][0], "gpt-5.6-sol")
+            self.assertIn("Switched this session", mod.render(decision))
+        finally:
+            _restore_env(old)
+
+    def test_band_jump_switches(self):
+        mod = load_router_module()
+        old = _with_env(_sticky_env())
+        mod.rpc_thread_settings = lambda *a, **k: (True, "confirmed")
+        try:
+            # Prior session decision was trivial (band 0); new is complex.
+            mod.session_remember(
+                "sess-jump",
+                dict(_sticky_decision(model="gpt-5.6-sol", current="gpt-5.6-sol",
+                                      complexity=10.0), **{"intent": "explain"}),
+                "explain")
+            decision = _sticky_decision(model="gpt-6-astra", complexity=70.0)
+            mod.maybe_switch(decision, "sess-jump")
+            self.assertEqual(decision["switch"], "done")
+            self.assertIn("complexity jumped", decision["switch_reason"])
+        finally:
+            _restore_env(old)
+
+    def test_high_confidence_switches(self):
+        mod = load_router_module()
+        old = _with_env(_sticky_env())
+        mod.rpc_thread_settings = lambda *a, **k: (True, "confirmed")
+        try:
+            mod.session_remember(
+                "sess-conf",
+                dict(_sticky_decision(model="gpt-5.6-sol", current="gpt-5.6-sol",
+                                      complexity=21.0), **{"intent": "explain"}),
+                "explain")
+            decision = _sticky_decision(model="gpt-5.6-luna", complexity=22.0,
+                                        intent_conf=0.95, mean_conf=0.8)
+            mod.maybe_switch(decision, "sess-conf")
+            self.assertEqual(decision["switch"], "done")
+            self.assertIn("high confidence", decision["switch_reason"])
+        finally:
+            _restore_env(old)
+
+    def test_stickiness_off_restores_always_switch(self):
+        mod = load_router_module()
+        old = _with_env(_sticky_env())
+        mod.rpc_thread_settings = lambda *a, **k: (True, "confirmed")
+        try:
+            proc_env = dict(os.environ)
+            import json as _json
+            cfg = os.environ["CLEARJEV_CONFIG"]
+            with open(cfg, "w") as f:
+                _json.dump({"stickiness": False}, f)
+            decision = _sticky_decision()
+            mod.maybe_switch(decision, "sess-off")
+            self.assertEqual(decision["switch"], "done")
+            self.assertEqual(decision["switch_reason"], "stickiness off")
+        finally:
+            _restore_env(old)
+
+    def test_stickiness_command_roundtrip(self):
+        proc, state = run_cli("stickiness", "off")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("OFF", proc.stdout)
+        proc, _ = run_cli("stickiness", env_extra={"CLEARJEV_STATE": state})
+        self.assertIn("OFF", proc.stdout)
+        proc, _ = run_cli("stickiness", "on",
+                          env_extra={"CLEARJEV_STATE": state})
+        self.assertIn("ON", proc.stdout)
+
+    def test_effort_only_update_omits_model(self):
+        mod = load_router_module()
+        seen = []
+        orig_send = mod._ws_send
+        mod._ws_send = lambda sock, obj: seen.append(obj) or orig_send(sock, obj)
+        try:
+            ok, detail = mod.rpc_thread_settings("nope-thread", None, "high",
+                                                 timeout=2)
+            self.assertFalse(ok)  # no daemon in unit tests, but params built
+        finally:
+            mod._ws_send = orig_send
+        self.assertTrue(seen)
+        update = [o for o in seen if o.get("method") == "thread/settings/update"]
+        self.assertTrue(update)
+        self.assertNotIn("model", update[0]["params"])
+        self.assertEqual(update[0]["params"]["effort"], "high")
+
+
 class TestCostControl(unittest.TestCase):
     """Measure first, then skip what can be skipped — conservatively."""
 

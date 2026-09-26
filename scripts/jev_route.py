@@ -796,7 +796,8 @@ def route_from_jev(answers):
             "mean_conf": mean_conf, "model": model,
             "reasoning": reasoning_lvl, "planning": planning_lvl,
             "repo": repo_lvl, "validation": validation,
-            "uncertain": uncertain, "reasons": reasons, "source": "jev"}
+            "uncertain": uncertain, "reasons": reasons, "source": "jev",
+            "forced": bool(demands["security_floor"])}
 
 
 def reason_list(intent, complexity, sec, repo, risk, ambiguous):
@@ -896,7 +897,7 @@ def heuristic_route(prompt, repo_meta):
     if model is None:
         raise ValueError("no enabled model profiles are available")
     return {"intent": intent, "intent_conf": 0.0, "complexity": complexity,
-             "band": band(complexity), "mean_conf": 0.0,
+            "band": band(complexity), "mean_conf": 0.0,
             "model": model,
             "reasoning": reasoning_for(complexity, profiles[model], sec),
             "planning": level_for(complexity, "planning"),
@@ -905,7 +906,7 @@ def heuristic_route(prompt, repo_meta):
             "uncertain": True, "reasons": reason_list(intent, complexity,
                                                       1.0 if sec else 0.0,
                                                       1.5, 1.5, 0.5),
-            "source": "heuristic"}
+            "source": "heuristic", "forced": bool(sec)}
 
 
 # ---------------------------------------------------------------- rendering
@@ -926,11 +927,18 @@ def render(decision):
             % (decision["model"], current, decision["reasoning"],
                decision["planning"], decision["validation"], decision["repo"]))
     switch = decision.get("switch", "")
+    reason = decision.get("switch_reason", "")
     if switch == "done":
         body += "\nSwitched this session to %s (%s) before answering." % (
             decision["model"], decision["reasoning"])
+        if reason and reason != "stickiness off":
+            body += " Reason: %s." % reason
     elif switch == "already":
         body += "\nAlready on %s; no switch needed." % decision["model"]
+    elif switch == "kept":
+        body += ("\nKept %s (gain below switch cost%s); effort -> %s."
+                 % (current, ": " + reason if reason else "",
+                    decision["reasoning"]))
     elif switch.startswith("failed"):
         body += "\nSwitch failed (%s); continuing with %s." % (switch[7:].strip(), current)
     elif switch.startswith("unavailable"):
@@ -1009,6 +1017,7 @@ def status():
         print("- jev: %d consecutive failure(s) (last: %s)" % (
             failures, health.get("last_error") or "?"))
     print("- auto-switch: " + ("ON" if auto_switch_enabled() else "OFF"))
+    print("- stickiness: " + ("ON" if stickiness_enabled() else "OFF"))
     print("- switch endpoint: " + app_server_sock())
     print("- state file: " + state_path())
     print("- TYPESAFE_API_KEY: " + ("set" if key else "MISSING (heuristic fallback)"))
@@ -1259,7 +1268,8 @@ def fallback_reason(exc):
     return "Jev response error"
 
 
-def route_prompt(prompt, cwd, current_model="", session_id=""):
+def route_prompt(prompt, cwd, current_model="", session_id="",
+                 remember=True):
     import time
     repo_meta = collect_repo_meta(cwd)
     profiles = active_profiles()
@@ -1274,7 +1284,7 @@ def route_prompt(prompt, cwd, current_model="", session_id=""):
         if extra:
             event.update(extra)
         log_usage(event)
-        if session_id and kind in ("jev", "cache", "reuse"):
+        if remember and session_id and kind in ("jev", "cache", "reuse"):
             session_remember(session_id, decision,
                              heuristic_intent_of(prompt))
         return decision
@@ -1477,14 +1487,16 @@ def _update_once(sock_path, thread_id, model, effort, deadline):
         _ws_send(sock, {"id": 0, "method": "initialize",
                         "params": {"clientInfo": {"name": "clearjev",
                                                  "title": "ClearJev",
-                                                 "version": "0.3.0"},
+                                                 "version": "0.5.0"},
                                    "capabilities": {"experimentalApi": True}}})
         if _ws_recv(sock, deadline, want_id=0) is None:
             return False, "no initialize response", True
         _ws_send(sock, {"method": "initialized", "params": {}})
+        params = {"threadId": thread_id, "effort": effort}
+        if model is not None:
+            params["model"] = model
         _ws_send(sock, {"id": 1, "method": "thread/settings/update",
-                        "params": {"threadId": thread_id, "model": model,
-                                   "effort": effort}})
+                        "params": params})
         resp = _ws_recv(sock, deadline, want_id=1)
         if resp is None:
             return False, "no settings response", True
@@ -1550,8 +1562,58 @@ def auto_switch_enabled():
     return True
 
 
+BAND_ORDER = ("trivial", "simple", "moderate", "complex", "very complex",
+              "critical")
+
+# Switch only on a significant expected gain: a forced floor, a big
+# complexity-band jump, or high Jev confidence. Anything else keeps the
+# model (preserving the Codex prompt cache) and only adjusts effort.
+SWITCH_BAND_JUMP = 2
+SWITCH_INTENT_CONF = 0.85
+SWITCH_MEAN_CONF = 0.70
+
+
+def stickiness_enabled():
+    try:
+        data = user_config()
+        if isinstance(data, dict) and data.get("stickiness") is False:
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def switch_verdict(decision, profiles, last):
+    """Decide model switch vs. effort-only keep. Returns (switch, reason)."""
+    current = decision.get("current_model") or "unknown"
+    if current == "unknown" or current == decision["model"]:
+        return False, "already"
+    if decision.get("forced"):
+        return True, "policy floor requires a stronger model"
+    if current not in profiles:
+        return True, "current model left the candidate set"
+    if last is None:
+        return True, "new task"
+    try:
+        old_band = BAND_ORDER.index(band(float(last.get("complexity", 0))))
+        new_band = BAND_ORDER.index(band(float(decision.get("complexity", 0))))
+    except (TypeError, ValueError):
+        return True, "new task"
+    if new_band - old_band >= SWITCH_BAND_JUMP:
+        return True, "complexity jumped %s -> %s" % (
+            BAND_ORDER[old_band], BAND_ORDER[new_band])
+    try:
+        intent_conf = float(decision.get("intent_conf", 0) or 0)
+        mean_conf = float(decision.get("mean_conf", 0) or 0)
+    except (TypeError, ValueError):
+        intent_conf, mean_conf = 0.0, 0.0
+    if intent_conf >= SWITCH_INTENT_CONF and mean_conf >= SWITCH_MEAN_CONF:
+        return True, "high confidence (intent %.2f)" % intent_conf
+    return False, "gain below switch cost"
+
+
 def maybe_switch(decision, session_id):
-    """Attempt the same-thread switch; record the outcome on the decision."""
+    """Apply routing: switch model on significant gain, else effort only."""
     current = decision.get("current_model") or "unknown"
     if current == "unknown" or current == decision["model"]:
         decision["switch"] = "already"
@@ -1562,10 +1624,24 @@ def maybe_switch(decision, session_id):
     if not session_id:
         decision["switch"] = "failed: no session id"
         return
-    ok, detail = rpc_thread_settings(session_id, decision["model"],
-                                     decision["reasoning"])
+    profiles = active_profiles()
+    if stickiness_enabled():
+        last = session_last(session_id)
+        prev = last.get("decision") if isinstance(last, dict) else None
+        switch, reason = switch_verdict(decision, profiles, prev)
+        decision["switch_reason"] = reason
+    else:
+        switch, reason = True, "stickiness off"
+        decision["switch_reason"] = reason
+    if switch:
+        ok, detail = rpc_thread_settings(session_id, decision["model"],
+                                         decision["reasoning"])
+    else:
+        ok, detail = rpc_thread_settings(session_id, None,
+                                         decision["reasoning"])
+        detail = "effort -> " + decision["reasoning"] + "; " + detail
     if ok:
-        decision["switch"] = "done"
+        decision["switch"] = "done" if switch else "kept"
     elif classify_unavailable(detail):
         decision["switch"] = "unavailable: " + detail
     else:
@@ -1632,8 +1708,24 @@ def main(argv):
         print("ClearJev auto-switch: " +
               ("ON" if auto_switch_enabled() else "OFF"))
         return 0
+    if command == "stickiness":
+        action = args[1].lower() if len(args) > 1 else "status"
+        if action in ("on", "off"):
+            try:
+                data = user_config()
+                data["stickiness"] = action == "on"
+                write_private_json(config_path(), data)
+                print("ClearJev stickiness " + action.upper())
+                return 0
+            except OSError as exc:
+                print("Failed: " + str(exc))
+                return 1
+        print("ClearJev stickiness: " +
+              ("ON" if stickiness_enabled() else "OFF") +
+              " (switch model only on significant gain; effort always adjusts)")
+        return 0
     if command in ("help", "h") or (not args and sys.stdin.isatty()):
-        print("ClearJev: on | off | status | check | key | models | run | costs | autoswitch")
+        print("ClearJev: on | off | status | check | key | models | run | costs | autoswitch | stickiness")
         print("Use 'clearjev models --help' or see README.md for details.")
         return 0
     disabled, _reason = is_disabled()
@@ -1696,8 +1788,13 @@ def main(argv):
 
     current_model = payload.get("model", "") if isinstance(payload, dict) else ""
     session_id = payload.get("session_id", "") if isinstance(payload, dict) else ""
-    decision = route_prompt(prompt, cwd, current_model, session_id)
+    # Remember only after the switch verdict: maybe_switch compares against
+    # the *previous* session decision for band jumps.
+    decision = route_prompt(prompt, cwd, current_model, session_id,
+                            remember=False)
     maybe_switch(decision, session_id)
+    if session_id:
+        session_remember(session_id, decision, heuristic_intent_of(prompt))
     emit(render(decision))
     return 0
 

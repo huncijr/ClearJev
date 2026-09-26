@@ -44,7 +44,8 @@ Every routing event appends one line to `~/.codex/clearjev/usage.jsonl`
 4. **Slim state.** At most 12 filenames plus a git change summary (counts,
    not filenames) are sent; the full 40-file list and per-file git status
    are gone.
-5. **Circuit breaker (existing).** After 3 straight Jev failures, calls
+5. **Stickiness.** The model switches only on significant gain (forced floor, big complexity jump, or high confidence); otherwise the model stays — preserving the Codex prompt cache — while effort still adjusts. `clearjev stickiness off` restores switch-on-any-difference.
+6. **Circuit breaker (existing).** After 3 straight Jev failures, calls
    pause with notice until a new key or a passing `clearjev check`.
 
 Anything uncertain still goes to Jev. If routing quality ever looks off,
