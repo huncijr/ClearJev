@@ -25,17 +25,13 @@ No key? It still works with a labeled heuristic fallback.
 
 ## Install
 
-Download first, inspect, then run — never pipe a download into a shell:
-
 ```bash
 curl -fsSL -o /tmp/clearjev-install.sh https://raw.githubusercontent.com/huncijr/ClearJev/main/scripts/install.sh
-less /tmp/clearjev-install.sh
 sh /tmp/clearjev-install.sh
 ```
 
 ```powershell
 Invoke-WebRequest -OutFile $env:TEMP\clearjev-install.ps1 https://raw.githubusercontent.com/huncijr/ClearJev/main/scripts/install.ps1
-notepad $env:TEMP\clearjev-install.ps1
 powershell -ExecutionPolicy Bypass -File $env:TEMP\clearjev-install.ps1
 ```
 
