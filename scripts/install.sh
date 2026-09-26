@@ -1,8 +1,12 @@
 #!/bin/sh
 # ClearJev installer for macOS and Linux.
+# Download-first: fetch the script, inspect it, then run it. Never pipe a
+# download straight into a shell.
+#   curl -fsSL -o /tmp/clearjev-install.sh https://raw.githubusercontent.com/huncijr/ClearJev/main/scripts/install.sh
+#   less /tmp/clearjev-install.sh
+#   sh /tmp/clearjev-install.sh [--force]
 # Idempotent: re-running without --force detects the installed version and
 # stops with "already downloaded". Routing state (on/off) is never reset.
-# Usage: install.sh [--force]
 set -eu
 
 FORCE=0
@@ -14,7 +18,9 @@ TMP=""
 cleanup() { [ -n "$TMP" ] && [ -d "$TMP" ] && rm -rf "$TMP"; return 0; }
 trap cleanup EXIT
 
-if [ -f "plugins/clearjev-router/.codex-plugin/plugin.json" ]; then
+if [ -f ".codex-plugin/plugin.json" ]; then
+  SRC="."
+elif [ -f "plugins/clearjev-router/.codex-plugin/plugin.json" ]; then
   SRC="plugins/clearjev-router"
 elif [ -n "${PLUGIN_SRC:-}" ] && [ -f "$PLUGIN_SRC/.codex-plugin/plugin.json" ]; then
   SRC="$PLUGIN_SRC"
@@ -23,7 +29,7 @@ else
   TMP="$(mktemp -d)"
   echo "Downloading ClearJev..."
   curl -fsSL "https://github.com/$REPO/archive/refs/heads/main.tar.gz" | tar -xz -C "$TMP"
-  SRC="$TMP/ClearJev-main/plugins/clearjev-router"
+  SRC="$TMP/ClearJev-main"
 fi
 
 command -v python3 >/dev/null || { echo "error: python3 is required" >&2; exit 1; }

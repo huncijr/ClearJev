@@ -29,16 +29,21 @@ step 3.
 
 ## 3. Complete the installation (required)
 
-Run the shell installer on the same machine. POSIX:
+Run the shell installer on the same machine (download-first, never pipe a
+download into a shell). POSIX:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.sh | sh
+curl -fsSL -o /tmp/clearjev-install.sh https://raw.githubusercontent.com/huncijr/ClearJev/main/scripts/install.sh
+less /tmp/clearjev-install.sh
+sh /tmp/clearjev-install.sh
 ```
 
 Windows (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.ps1 | iex
+Invoke-WebRequest -OutFile $env:TEMP\clearjev-install.ps1 https://raw.githubusercontent.com/huncijr/ClearJev/main/scripts/install.ps1
+notepad $env:TEMP\clearjev-install.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\clearjev-install.ps1
 ```
 
 The installer copies a self-contained runtime to
@@ -50,7 +55,7 @@ instead, stop and report it.
 
 Offline alternative (no pipe): shallow-clone
 `https://github.com/huncijr/ClearJev`, then run
-`plugins/clearjev-router/scripts/install.sh` from the clone.
+`scripts/install.sh` from the clone.
 
 ## 4. API key
 

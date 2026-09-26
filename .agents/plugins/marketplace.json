@@ -8,7 +8,7 @@
       "name": "clearjev-router",
       "source": {
         "source": "local",
-        "path": "./plugins/clearjev-router"
+        "path": "./"
       },
       "policy": {
         "installation": "AVAILABLE",

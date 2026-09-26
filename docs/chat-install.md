@@ -16,7 +16,7 @@ Install the ClearJev skill and hook on my machine:
 
 1. Clone the https://github.com/huncijr/ClearJev repo into a temp folder
    (a shallow clone is enough: git clone --depth 1).
-2. Run plugins/clearjev-router/scripts/install.sh from the clone.
+2. Run scripts/install.sh from the clone.
    It copies a self-contained runtime into ~/.codex/clearjev-runtime,
    installs the discoverable `clearjev` skill into ~/.codex/skills/clearjev
    + ~/.agents/skills/clearjev, registers the UserPromptSubmit hook in

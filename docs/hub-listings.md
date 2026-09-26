@@ -38,15 +38,15 @@ Exact entry to add (copy-paste):
   "description": "Automatic pre-prompt routing for Codex CLI: Jev (TypeSafe System One) judges every prompt and switches the session to the chosen model plus reasoning effort, with $clearjev chat control and a circuit breaker for bad API keys.",
   "category": "Development & Workflow",
   "source": "awesome-codex-plugins",
-  "install_url": "https://raw.githubusercontent.com/huncijr/ClearJev/HEAD/plugins/clearjev-router/.codex-plugin/plugin.json"
+  "install_url": "https://raw.githubusercontent.com/huncijr/ClearJev/HEAD/.codex-plugin/plugin.json"
 }
 ```
 
 Pre-flight (already verified in this repo):
 - `install_url` returns the manifest (contains `name`, `version`,
   `skills`, `hooks`, `interface`).
-- Referenced `./skills` and `./hooks/hooks.json` exist under
-  `plugins/clearjev-router/`.
+- Referenced `./skills` and `./hooks/hooks.json` exist at the repo root
+  (single-plugin layout with root `.codex-plugin/plugin.json`).
 
 ## 2. codex-marketplace.com — submit page package
 
@@ -58,7 +58,7 @@ Pre-flight (already verified in this repo):
 Submit this:
 
 - Repository URL: `https://github.com/huncijr/ClearJev`
-- Plugin path in repo: `plugins/clearjev-router`
+- Plugin path in repo: `./` (root single-plugin layout)
 - One-command install for the listing:
   `npx codex-marketplace add huncijr/ClearJev --plugin`
 

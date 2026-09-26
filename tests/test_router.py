@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 HOOK = os.path.join(os.path.dirname(__file__), "..",
-                    "plugins", "clearjev-router", "scripts", "jev_route.py")
+                    "scripts", "jev_route.py")
 HOOK = os.path.normpath(HOOK)
 
 
@@ -503,11 +503,10 @@ class TestInstallerIdempotent(unittest.TestCase):
         base = dict(os.environ)
         base["HOME"] = home
         base["CODEX_HOME"] = codex
-        base["PLUGIN_SRC"] = os.path.join(
-            repo, "plugins", "clearjev-router")
+        base["PLUGIN_SRC"] = repo
         base["TYPESAFE_API_KEY"] = ""
         script = os.path.join(
-            repo, "plugins", "clearjev-router", "scripts", "install.sh")
+            repo, "scripts", "install.sh")
         first = subprocess.run(
             ["sh", script], capture_output=True, text=True, timeout=120,
             cwd="/tmp", env=base)
@@ -746,8 +745,7 @@ class TestAutoSwitch(unittest.TestCase):
 
 
 class TestPackaging(unittest.TestCase):
-    ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..",
-                                         "plugins", "clearjev-router"))
+    ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
     REPO = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 
     def test_readme_documents_routing_flow(self):

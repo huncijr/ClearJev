@@ -1,4 +1,9 @@
 # ClearJev installer for Windows PowerShell 5.1+.
+# Download-first: fetch the script, inspect it, then run it. Never pipe a
+# download straight into the shell.
+#   Invoke-WebRequest -OutFile $env:TEMP\clearjev-install.ps1 https://raw.githubusercontent.com/huncijr/ClearJev/main/scripts/install.ps1
+#   notepad $env:TEMP\clearjev-install.ps1
+#   powershell -ExecutionPolicy Bypass -File $env:TEMP\clearjev-install.ps1
 # Idempotent: re-running without -Force detects the installed version and
 # stops with "already downloaded". Routing state (on/off) is never reset.
 param([switch]$Force)
@@ -6,7 +11,7 @@ $ErrorActionPreference = "Stop"
 $Repo = "huncijr/ClearJev"
 
 $Src = $null
-foreach ($candidate in @("plugins/clearjev-router", $env:PLUGIN_SRC)) {
+foreach ($candidate in @(".", "plugins/clearjev-router", $env:PLUGIN_SRC)) {
   if ($candidate -and (Test-Path (Join-Path $candidate ".codex-plugin/plugin.json"))) {
     $Src = (Resolve-Path $candidate).Path
     break
@@ -19,7 +24,7 @@ if (-not $Src) {
   $zip = Join-Path $tmp "repo.zip"
   Invoke-WebRequest -Uri "https://github.com/$Repo/archive/refs/heads/main.zip" -OutFile $zip
   Expand-Archive -Path $zip -DestinationPath $tmp
-  $Src = Join-Path $tmp "ClearJev-main/plugins/clearjev-router"
+  $Src = Join-Path $tmp "ClearJev-main"
 }
 
 $usePy = $null -ne (Get-Command py -ErrorAction SilentlyContinue)

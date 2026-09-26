@@ -26,12 +26,11 @@ recommends, it never switches the session model by itself.
 
 ## Round 1 — test from Codex CLI
 
-1. Install (pick one method; try a different one in Round 3):
-   - Installer (pipe): `curl -fsSL https://raw.githubusercontent.com/huncijr/ClearJev/main/plugins/clearjev-router/scripts/install.sh | sh`
-     (key prompt reads from `/dev/tty` with echo off, safe when piped).
-   - Installer (download-first, safest on any shell): `curl -fsSL -o
-     /tmp/clearjev-install.sh <same URL above>` then `sh
-     /tmp/clearjev-install.sh`.
+1. Install (download-first only — never pipe a download into a shell):
+   `curl -fsSL -o /tmp/clearjev-install.sh
+   https://raw.githubusercontent.com/huncijr/ClearJev/main/scripts/install.sh`,
+   inspect it, then `sh /tmp/clearjev-install.sh`.
+   (Key prompt reads from `/dev/tty` with echo off.)
    - Chat: open `codex`, paste the prompt from `docs/chat-install.md`.
    - The installer stores the key in `~/.codex/clearjev/credentials.json`
      (owner-only), never in shell profiles. `grep TYPESAFE_API_KEY
@@ -101,7 +100,7 @@ before a release:
 
 1. **Direct hook call (no Codex at all)** — fastest iteration:
    `echo '{"prompt":"...","cwd":"."}' | python3
-   plugins/clearjev-router/scripts/jev_route.py`
+   scripts/jev_route.py`
 2. **Unit tests** — `python3 -m unittest discover -s tests -v` (65 tests,
    no network, hermetic state/catalog/credentials via temp dirs).
 3. **`clearjev status` / `clearjev check`** — on/off state, key presence,
