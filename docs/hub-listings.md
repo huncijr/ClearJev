@@ -14,7 +14,7 @@ Any Codex CLI user can install straight from GitHub, no accounts:
 codex plugin marketplace add huncijr/ClearJev
 ```
 
-then install `clearjev-router` from `/plugins`. This works because the repo
+then install `clearjev` from `/plugins`. This works because the repo
 ships a valid `.agents/plugins/marketplace.json` plus a valid
 `.codex-plugin/plugin.json` (both validated by `tests/test_router.py`).
 

@@ -1,7 +1,7 @@
 {
-  "name": "clearjev-router",
+  "name": "clearjev",
   "version": "0.3.0",
-  "description": "Automatic pre-prompt routing for Codex CLI: Jev (TypeSafe System One) judges every prompt and switches the session to the chosen model plus reasoning effort via the local app-server. CLI chat control via $clearjev; pre-routed CLI sessions via `clearjev run`.",
+  "description": "Introducing ClearJev, an automatic routing skill for Codex CLI where Jev (from TypeSafe AI) selects the best model based on your prompt.",
   "author": {
     "name": "ClearJev"
   },

@@ -5,7 +5,7 @@
   },
   "plugins": [
     {
-      "name": "clearjev-router",
+      "name": "clearjev",
       "source": {
         "source": "local",
         "path": "./"
