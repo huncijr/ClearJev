@@ -78,16 +78,3 @@ messages work without shell (the hook runs them itself).
 CLI-only: in the Codex App the hook stays silent (no cost) and the skill
 refuses — use the App natively. Uninstall:
 `~/.codex/clearjev-runtime/scripts/uninstall.sh [--purge]`.
-
-## Shell
-
-```bash
-clearjev status | clearjev check | clearjev on | clearjev off
-clearjev autoswitch off   # advice only, never switch
-clearjev key set '<key>' | clearjev key unset | clearjev key status
-clearjev models list | clearjev models available
-clearjev models add <slug> --reasoning all|low,medium,...
-clearjev models remove <slug>
-clearjev models reasoning <slug> add|remove <levels>
-clearjev run 'your task'  # route, then open Codex with that model
-```
