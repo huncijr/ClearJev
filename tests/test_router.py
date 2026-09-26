@@ -48,6 +48,9 @@ def hermetic_env(env_extra=None):
     # No model catalog in unit tests: fall back to shipped profiles only.
     env.setdefault("CLEARJEV_MODELS_CACHE",
                    os.path.join(tmp, "no-models.json"))
+    # Hermetic data dir: usage ledger, decision cache and session store must
+    # never touch the real ~/.codex/clearjev.
+    env.setdefault("CLEARJEV_DATA", os.path.join(tmp, "data"))
     return env
 
 
@@ -94,7 +97,8 @@ class TestContract(unittest.TestCase):
     def test_fail_open_garbage_stdin(self):
         proc = subprocess.run(
             [sys.executable, HOOK], input="not json {{{",
-            capture_output=True, text=True, timeout=30, cwd="/tmp")
+            capture_output=True, text=True, timeout=30, cwd="/tmp",
+            env=hermetic_env())
         self.assertEqual(proc.returncode, 0)
 
     def test_no_block_without_key(self):
@@ -386,7 +390,8 @@ def _module_env(tmp):
     return {"CLEARJEV_CONFIG": __import__("os").path.join(d, "config.json"),
             "CLEARJEV_STATE": __import__("os").path.join(d, "config.json"),
             "CLEARJEV_CREDENTIALS": creds,
-            "CLEARJEV_MODELS_CACHE": __import__("os").path.join(d, "no-models.json")}
+            "CLEARJEV_MODELS_CACHE": __import__("os").path.join(d, "no-models.json"),
+            "CLEARJEV_DATA": __import__("os").path.join(d, "data")}
 
 
 class TestCircuitBreaker(unittest.TestCase):
@@ -405,7 +410,7 @@ class TestCircuitBreaker(unittest.TestCase):
         try:
             reasons = []
             for _ in range(4):
-                decision = mod.route_prompt("Explain x.", "/tmp")
+                decision = mod.route_prompt("Explain dependency injection in TypeScript with concrete code examples.", "/tmp")
                 reasons.append(decision["fallback_reason"])
             self.assertEqual(len(calls), 3)
             for r in reasons[:3]:
@@ -425,8 +430,8 @@ class TestCircuitBreaker(unittest.TestCase):
         mod.call_jev = failing
         try:
             for _ in range(3):
-                mod.route_prompt("Explain x.", "/tmp")
-            decision = mod.route_prompt("Explain x.", "/tmp")
+                mod.route_prompt("Explain dependency injection in TypeScript with concrete code examples.", "/tmp")
+            decision = mod.route_prompt("Explain dependency injection in TypeScript with concrete code examples.", "/tmp")
             self.assertIn("Jev paused after 3 failures", decision["fallback_reason"])
             self.assertIn("clearjev check", decision["fallback_reason"])
         finally:
@@ -443,12 +448,12 @@ class TestCircuitBreaker(unittest.TestCase):
         mod.call_jev = failing
         try:
             for _ in range(3):
-                mod.route_prompt("Explain x.", "/tmp")
+                mod.route_prompt("Explain dependency injection in TypeScript with concrete code examples.", "/tmp")
             self.assertTrue(mod.jev_circuit_open())
             ok, _ = mod.set_api_key("fixed-key")
             self.assertTrue(ok)
             mod.call_jev = lambda state, key: {"answers": {}}
-            decision = mod.route_prompt("Explain x.", "/tmp")
+            decision = mod.route_prompt("Explain dependency injection in TypeScript with concrete code examples.", "/tmp")
             self.assertEqual(decision["source"], "jev")
             self.assertFalse(mod.jev_circuit_open())
         finally:
@@ -522,6 +527,176 @@ class TestInstallerIdempotent(unittest.TestCase):
             timeout=120, cwd="/tmp", env=base)
         self.assertEqual(third.returncode, 0, third.stderr)
         self.assertNotIn("already downloaded", third.stdout)
+
+
+def _cost_env():
+    import tempfile as _tf
+    d = _tf.mkdtemp(prefix="clearjev-cost-")
+    env = {"CLEARJEV_CONFIG": d + "/config.json",
+           "CLEARJEV_STATE": d + "/config.json",
+           "CLEARJEV_CREDENTIALS": d + "/creds.json",
+           "CLEARJEV_MODELS_CACHE": d + "/no-models.json",
+           "CLEARJEV_DATA": d + "/data"}
+    with open(d + "/creds.json", "w") as f:
+        __import__("json").dump({"api_key": "test-key"}, f)
+    return env
+
+
+def _with_env(env):
+    old = dict(os.environ)
+    os.environ.update(env)
+    return old
+
+
+def _restore_env(old):
+    os.environ.clear()
+    os.environ.update(old)
+
+
+CANNED_JEV = {"model": "jev-1.13.0",
+              "usage": {"input_tokens": 500, "output_tokens": 20},
+              "answers": {
+                  "intent": {"type": "choice", "choice": "explain",
+                             "confidence": 0.9},
+                  "coding_demand": {"type": "score", "score": 0,
+                                    "confidence": 0.9},
+                  "reasoning_demand": {"type": "score", "score": 0,
+                                       "confidence": 0.9},
+                  "planning_demand": {"type": "score", "score": 0,
+                                      "confidence": 0.9},
+                  "repo_demand": {"type": "score", "score": 0,
+                                  "confidence": 0.9},
+                  "risk": {"type": "score", "score": 0, "confidence": 0.9},
+                  "ambiguous": {"type": "noul", "noul": 0.0},
+                  "requires_repo": {"type": "noul", "noul": 0.0}}}
+
+
+class TestCostControl(unittest.TestCase):
+    """Measure first, then skip what can be skipped — conservatively."""
+
+    def test_trivial_prompt_never_calls_jev(self):
+        mod = load_router_module()
+        old = _with_env(_cost_env())
+        calls = []
+        mod.call_jev = lambda state, key: calls.append(1) or CANNED_JEV
+        try:
+            decision = mod.route_prompt("thanks!", "/tmp")
+            self.assertEqual(calls, [])
+            self.assertEqual(decision["source"], "heuristic")
+            self.assertIn("trivial", decision["fallback_reason"])
+        finally:
+            _restore_env(old)
+
+    def test_nontrivial_prompt_calls_jev(self):
+        mod = load_router_module()
+        old = _with_env(_cost_env())
+        calls = []
+        mod.call_jev = lambda state, key: calls.append(1) or CANNED_JEV
+        try:
+            decision = mod.route_prompt(
+                "Implement Stripe subscriptions with monthly/yearly plans and webhooks.",
+                "/tmp")
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(decision["source"], "jev")
+        finally:
+            _restore_env(old)
+
+    def test_exact_duplicate_uses_cache(self):
+        mod = load_router_module()
+        old = _with_env(_cost_env())
+        calls = []
+        mod.call_jev = lambda state, key: calls.append(1) or CANNED_JEV
+        try:
+            prompt = ("Redesign the authentication module to support OAuth2 "
+                      "with refresh tokens.")
+            first = mod.route_prompt(prompt, "/tmp")
+            second = mod.route_prompt(prompt, "/tmp")
+            self.assertEqual(len(calls), 1)
+            self.assertTrue(second.get("cached"))
+            self.assertEqual(second["model"], first["model"])
+        finally:
+            _restore_env(old)
+
+    def test_session_reuse_for_stable_followup(self):
+        mod = load_router_module()
+        old = _with_env(_cost_env())
+        calls = []
+        mod.call_jev = lambda state, key: calls.append(1) or CANNED_JEV
+        try:
+            long_q = ("Explain how dependency injection works in TypeScript "
+                      "with a practical container example included.")
+            first = mod.route_prompt(long_q, "/tmp", "gpt-5.6-luna", "sess-1")
+            self.assertEqual(len(calls), 1)
+    # Short same-intent follow-up, same session and model: no new call.
+            second = mod.route_prompt("can you explain that part again briefly?",
+                                      "/tmp", "gpt-5.6-luna", "sess-1")
+            self.assertEqual(len(calls), 1)
+            self.assertTrue(second.get("reused"))
+            self.assertEqual(second["model"], first["model"])
+        finally:
+            _restore_env(old)
+
+    def test_no_reuse_after_manual_model_switch(self):
+        mod = load_router_module()
+        old = _with_env(_cost_env())
+        calls = []
+        mod.call_jev = lambda state, key: calls.append(1) or CANNED_JEV
+        try:
+            long_q = ("Explain how dependency injection works in TypeScript "
+                      "with a practical container example included.")
+            mod.route_prompt(long_q, "/tmp", "gpt-5.6-luna", "sess-2")
+            # User switched manually: never reuse, ask Jev again.
+            mod.route_prompt("can you explain that part again briefly?",
+                             "/tmp", "gpt-5.6-sol", "sess-2")
+            self.assertEqual(len(calls), 2)
+        finally:
+            _restore_env(old)
+
+    def test_no_reuse_on_intent_change(self):
+        mod = load_router_module()
+        old = _with_env(_cost_env())
+        calls = []
+        mod.call_jev = lambda state, key: calls.append(1) or CANNED_JEV
+        try:
+            long_q = ("Explain how dependency injection works in TypeScript "
+                      "with a practical container example included.")
+            mod.route_prompt(long_q, "/tmp", "gpt-5.6-luna", "sess-3")
+            mod.route_prompt("now implement it in that repo",
+                             "/tmp", "gpt-5.6-luna", "sess-3")
+            self.assertEqual(len(calls), 2)
+        finally:
+            _restore_env(old)
+
+    def test_slim_repo_state(self):
+        import tempfile as _tf
+        mod = load_router_module()
+        d = _tf.mkdtemp(prefix="clearjev-slim-")
+        for i in range(50):
+            open(os.path.join(d, "file%02d.txt" % i), "w").write("x")
+        meta = mod.collect_repo_meta(d)
+        self.assertLessEqual(len(meta["top_files"]), 13)
+        self.assertNotIn("\n", meta.get("git_status", ""))
+        fp1 = mod.repo_fingerprint(d)
+        fp2 = mod.repo_fingerprint(d)
+        self.assertEqual(fp1, fp2)
+        self.assertEqual(len(fp1), 16)
+
+    def test_costs_command_aggregates(self):
+        mod = load_router_module()
+        env = _cost_env()
+        old = _with_env(env)
+        try:
+            mod.log_usage({"ts": 1, "kind": "jev", "input_tokens": 500,
+                           "cost_usd": 0.000021})
+            mod.log_usage({"ts": 2, "kind": "cache", "saved_tokens": 500})
+            mod.log_usage({"ts": 3, "kind": "trivial"})
+        finally:
+            _restore_env(old)
+        proc, _ = run_cli("costs", env_extra=env)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("jev calls: 1", proc.stdout)
+        self.assertIn("jev input tokens: 500", proc.stdout)
+        self.assertIn("saved events", proc.stdout)
 
 
 class TestHostScope(unittest.TestCase):

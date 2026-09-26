@@ -21,6 +21,11 @@ Switched this session to gpt-5.6-luna (low). ...
 ```
 
 Once it is ON you never type `$clearjev` again — every prompt routes itself.
+
+Jev calls cost input tokens with no server-side caching, so the router
+skips what it can prove safe: exact duplicates (15 min), stable follow-ups
+in the same session, and trivial chit-chat. `clearjev costs` shows spend
+vs. saved. Details: `docs/costs.md`.
 No key? It still works with a labeled heuristic fallback.
 
 ## Install

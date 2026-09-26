@@ -80,6 +80,7 @@ return its output. Do not reimplement state changes by editing JSON manually.
 - Remove reasoning levels: `clearjev models reasoning <slug> remove max,ultra`
 - Start a routed CLI session: `clearjev run '<prompt>'`
 - Auto-switch control: `clearjev autoswitch on|off|status`
+- Cost report: `clearjev costs` (spend vs. saved, local ledger only)
 
 If `clearjev` is unavailable, run the router at
 `~/.codex/clearjev-runtime/scripts/jev_route.py` with `python3` (or `py -3` on

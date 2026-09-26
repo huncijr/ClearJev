@@ -1,6 +1,6 @@
 {
   "name": "clearjev",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Introducing ClearJev, an automatic routing skill for Codex CLI where Jev (from TypeSafe AI) selects the best model based on your prompt.",
   "author": {
     "name": "ClearJev"

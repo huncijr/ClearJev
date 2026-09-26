@@ -92,13 +92,17 @@ def extract_prompt(payload):
 
 
 def collect_repo_meta(cwd):
-    """Progressive Level 1 scan: metadata only, best-effort, never raises."""
+    """Progressive Level 1 scan: metadata only, best-effort, never raises.
+
+    Token-slim by design: at most 12 filenames and a git change summary
+    (counts, not filenames) are transmitted. Local collection stays free.
+    """
     meta = {"languages": [], "top_files": [], "git_status": ""}
     try:
         entries = sorted(os.listdir(cwd or "."))
     except OSError:
         return meta
-    meta["top_files"] = [e for e in entries if not e.startswith(".")][:40]
+    meta["top_files"] = [e for e in entries if not e.startswith(".")][:12]
     markers = {"package.json": "node", "pyproject.toml": "python",
                "requirements.txt": "python", "Cargo.toml": "rust",
                "go.mod": "go", "pom.xml": "java", "Gemfile": "ruby",
@@ -119,11 +123,36 @@ def collect_repo_meta(cwd):
             ["git", "status", "--porcelain=v1", "-uno"],
             cwd=cwd or ".", capture_output=True, text=True, timeout=3)
         if proc.returncode == 0 and proc.stdout.strip():
-            lines = proc.stdout.strip().splitlines()[:20]
-            meta["git_status"] = "\n".join(lines)
+            lines = proc.stdout.strip().splitlines()
+            kinds = {"M": 0, "A": 0, "D": 0, "R": 0, "other": 0}
+            for line in lines:
+                code = line[:2].strip().replace("?", "other")
+                kinds[code[0] if code and code[0] in kinds else "other"] += 1
+            parts = [k + ":" + str(v) for k, v in kinds.items() if v]
+            meta["git_status"] = ("%d changed files (%s)"
+                                  % (len(lines), ", ".join(parts)))
     except Exception:
         pass
     return meta
+
+
+def repo_fingerprint(cwd):
+    """Cheap repo identity for the decision cache. Never raises."""
+    head = "nogit"
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=cwd or ".",
+            capture_output=True, text=True, timeout=3)
+        if proc.returncode == 0 and proc.stdout.strip():
+            head = proc.stdout.strip()
+    except Exception:
+        pass
+    try:
+        meta = collect_repo_meta(cwd)
+        blob = head + "|" + json.dumps(meta, sort_keys=True)
+    except Exception:
+        blob = head
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------- local configuration
@@ -261,6 +290,180 @@ def get_api_key():
     value = read_json(credentials_path(), {})
     key = value.get("api_key") if isinstance(value, dict) else None
     return key.strip() if isinstance(key, str) else ""
+
+
+# ---------------------------------------------------------------- cost control
+#
+# TypeSafe bills every Jev call (no prompt caching server-side), so savings
+# live here: a usage ledger for visibility, an exact-duplicate decision
+# cache, session reuse for stable follow-ups, and a trivial-prompt gate.
+# All conservative: anything uncertain still goes to Jev.
+
+JEV_PRICE_PER_MTOK = 0.042
+DECISION_CACHE_TTL = 900  # seconds
+DECISION_CACHE_MAX = 50
+SESSION_REUSE_TTL = 900
+SESSION_REUSE_MAXLEN = 120
+SESSION_REUSE_MAX_COMPLEXITY = 40
+TRIVIAL_MAXLEN = 40
+
+CODE_SIGNALS = (
+    "implement", "build", "creat", "add", "fix", "bug", "debug", "error",
+    "fail", "test", "teszt", "code", "file", "function", "class", "method",
+    "refactor", "review", "migrat", "secur", "auth", "deploy", "data",
+    "sql", "api", "http", "server", "commit", "merge", "branch", "install",
+    "config", "docker", "script", "regex", "json", "yaml", "python",
+    "javascript", "typescript", "rust", "golang", "java", "css", "html",
+    "shell", "linux", "windows", "token", "password", "login", "oauth",
+    "payment", "stripe", "hiba", "javít", "javits", "kód", "kod", "fájl",
+    "fajl", "függvény", "fuggveny", "telepít", "telepit",
+)
+
+
+def usage_path():
+    return os.path.join(data_dir(), "usage.jsonl")
+
+
+def log_usage(event):
+    """Append one ledger line. Best-effort, never raises."""
+    try:
+        parent = os.path.dirname(usage_path())
+        if parent:
+            os.makedirs(parent, mode=0o700, exist_ok=True)
+        with open(usage_path(), "a", encoding="utf-8") as f:
+            f.write(json.dumps(event) + "\n")
+    except (OSError, ValueError, TypeError):
+        pass
+
+
+def estimate_cost(input_tokens):
+    try:
+        return round(float(input_tokens) * JEV_PRICE_PER_MTOK / 1e6, 6)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _load_json_file(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_json_file(path, data):
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, mode=0o700, exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def decision_cache_path():
+    return os.path.join(data_dir(), "decision_cache.json")
+
+
+def sessions_path():
+    return os.path.join(data_dir(), "sessions.json")
+
+
+def normalize_prompt(prompt):
+    return " ".join((prompt or "").lower().split())
+
+
+def decision_cache_key(prompt, fingerprint, profiles):
+    return hashlib.sha256("|".join((
+        normalize_prompt(prompt), fingerprint,
+        ",".join(sorted(profiles)))).encode("utf-8")).hexdigest()[:32]
+
+
+def decision_cache_get(key):
+    import time
+    cache = _load_json_file(decision_cache_path())
+    entry = cache.get(key)
+    if not isinstance(entry, dict):
+        return None
+    try:
+        if time.time() - float(entry.get("ts", 0)) > DECISION_CACHE_TTL:
+            return None
+    except (TypeError, ValueError):
+        return None
+    decision = entry.get("decision")
+    return decision if isinstance(decision, dict) else None
+
+
+def decision_cache_put(key, decision):
+    import time
+    cache = _load_json_file(decision_cache_path())
+    keep = {k: v for k, v in cache.items() if isinstance(v, dict)}
+    stored = {k: v for k, v in decision.items()
+              if k not in ("current_model", "switch")}
+    keep[key] = {"ts": time.time(), "decision": stored}
+    while len(keep) > DECISION_CACHE_MAX:
+        oldest = min(keep, key=lambda k: keep[k].get("ts", 0))
+        del keep[oldest]
+    _save_json_file(decision_cache_path(), keep)
+
+
+def session_last(session_id):
+    import time
+    if not session_id:
+        return None
+    sessions = _load_json_file(sessions_path())
+    entry = sessions.get(session_id)
+    if not isinstance(entry, dict):
+        return None
+    try:
+        if time.time() - float(entry.get("ts", 0)) > SESSION_REUSE_TTL:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return entry
+
+
+def session_remember(session_id, decision, intent):
+    import time
+    if not session_id or not isinstance(decision, dict):
+        return
+    sessions = _load_json_file(sessions_path())
+    stored = {k: v for k, v in decision.items()
+              if k not in ("current_model", "switch")}
+    sessions[session_id] = {"ts": time.time(), "intent": intent,
+                            "decision": stored}
+    while len(sessions) > DECISION_CACHE_MAX:
+        oldest = min(sessions, key=lambda k: sessions[k].get("ts", 0)
+                     if isinstance(sessions[k], dict) else 0)
+        del sessions[oldest]
+    _save_json_file(sessions_path(), sessions)
+
+
+def heuristic_intent_of(prompt):
+    """Keyword intent without any network. Used for reuse/gate decisions."""
+    low = (prompt or "").lower()
+    intent = "unknown"
+    if any(k in low for k in ("implement", "build", "create", "add a",
+                              "feature", "integrat")):
+        intent = "implement"
+    for keys, mapped in KEYWORDS:
+        if any(k in low for k in keys) and mapped:
+            intent = mapped
+            break
+    return intent
+
+
+def is_trivial_prompt(prompt):
+    """Conservative: short, no code signals, no question about the repo."""
+    text = (prompt or "").strip()
+    if not text or len(text) >= TRIVIAL_MAXLEN:
+        return False
+    low = text.lower()
+    return not any(sig in low for sig in CODE_SIGNALS)
 
 
 # ---------------------------------------------------------------- Jev call
@@ -1056,8 +1259,65 @@ def fallback_reason(exc):
     return "Jev response error"
 
 
-def route_prompt(prompt, cwd, current_model=""):
+def route_prompt(prompt, cwd, current_model="", session_id=""):
+    import time
     repo_meta = collect_repo_meta(cwd)
+    profiles = active_profiles()
+    now = time.time()
+
+    def finalize(decision, kind, extra=None):
+        decision["current_model"] = current_model
+        event = {"ts": now, "kind": kind,
+                 "intent": decision.get("intent"),
+                 "complexity": decision.get("complexity"),
+                 "model": decision.get("model")}
+        if extra:
+            event.update(extra)
+        log_usage(event)
+        if session_id and kind in ("jev", "cache", "reuse"):
+            session_remember(session_id, decision,
+                             heuristic_intent_of(prompt))
+        return decision
+
+    # 1. Exact-duplicate cache: same prompt + repo + candidates = free reuse.
+    fingerprint = repo_fingerprint(cwd)
+    cache_key = decision_cache_key(prompt, fingerprint, profiles)
+    cached = decision_cache_get(cache_key)
+    if cached is not None:
+        cached = dict(cached)
+        cached["cached"] = True
+        return finalize(cached, "cache",
+                        {"saved_tokens": cached.get("input_tokens", 0)})
+
+    # 2. Session reuse: stable follow-up, same intent, low prior complexity,
+    #    and the stored model still matches the session (never override a
+    #    manual /model switch).
+    last = session_last(session_id) if session_id else None
+    if last is not None:
+        prev = last.get("decision") if isinstance(last, dict) else None
+        try:
+            prev_complexity = float(prev.get("complexity", 99)
+                                    if isinstance(prev, dict) else 99)
+        except (TypeError, ValueError):
+            prev_complexity = 99.0
+        if (isinstance(prev, dict)
+                and len((prompt or "").strip()) < SESSION_REUSE_MAXLEN
+                and heuristic_intent_of(prompt) == last.get("intent")
+                and prev_complexity < SESSION_REUSE_MAX_COMPLEXITY
+                and prev.get("model") in profiles
+                and (not current_model or prev.get("model") == current_model)):
+            reused = dict(prev)
+            reused["reused"] = True
+            return finalize(reused, "reuse",
+                            {"saved_tokens": prev.get("input_tokens", 0)})
+
+    # 3. Trivial gate: short chit-chat never reaches the network.
+    if is_trivial_prompt(prompt):
+        decision = heuristic_route(prompt, repo_meta)
+        decision["fallback_reason"] = ("trivial prompt — local routing, "
+                                       "no Jev call")
+        return finalize(decision, "trivial")
+
     state = {"prompt": {"text": prompt}, "repo": repo_meta,
              "note": ("Classify the developer request in `prompt.text`. "
                       "Use `repo` only as background.")}
@@ -1071,8 +1331,25 @@ def route_prompt(prompt, cwd, current_model=""):
         else:
             try:
                 response = call_jev(state, api_key)
+                usage = response.get("usage", {}) or {}
                 decision = route_from_jev(response.get("answers", {}))
+                try:
+                    in_tok = int(usage.get("input_tokens", 0) or 0)
+                except (TypeError, ValueError):
+                    in_tok = 0
+                try:
+                    out_tok = int(usage.get("output_tokens", 0) or 0)
+                except (TypeError, ValueError):
+                    out_tok = 0
+                decision["input_tokens"] = in_tok
+                decision = finalize(decision, "jev",
+                                    {"input_tokens": in_tok,
+                                     "output_tokens": out_tok,
+                                     "cost_usd": estimate_cost(in_tok),
+                                     "jev_model": response.get("model", "")})
+                decision_cache_put(cache_key, decision)
                 jev_note_success()
+                return decision
             except Exception as exc:
                 error = exc
                 jev_note_failure(fallback_reason(exc))
@@ -1086,6 +1363,7 @@ def route_prompt(prompt, cwd, current_model=""):
                     JEV_MAX_FAILURES, health.get("last_error") or "?"))
         else:
             decision["fallback_reason"] = fallback_reason(error)
+        return finalize(decision, "fallback")
     decision["current_model"] = current_model
     return decision
 
@@ -1335,6 +1613,8 @@ def main(argv):
         return key_command(args[1:])
     if command in ("models", "model"):
         return models_command(args[1:])
+    if command == "costs":
+        return costs_command(args[1:])
     if command == "run":
         return run_command(args[1:])
     if command == "autoswitch":
@@ -1353,7 +1633,7 @@ def main(argv):
               ("ON" if auto_switch_enabled() else "OFF"))
         return 0
     if command in ("help", "h") or (not args and sys.stdin.isatty()):
-        print("ClearJev: on | off | status | check | key | models | run")
+        print("ClearJev: on | off | status | check | key | models | run | costs | autoswitch")
         print("Use 'clearjev models --help' or see README.md for details.")
         return 0
     disabled, _reason = is_disabled()
@@ -1416,9 +1696,66 @@ def main(argv):
 
     current_model = payload.get("model", "") if isinstance(payload, dict) else ""
     session_id = payload.get("session_id", "") if isinstance(payload, dict) else ""
-    decision = route_prompt(prompt, cwd, current_model)
+    decision = route_prompt(prompt, cwd, current_model, session_id)
     maybe_switch(decision, session_id)
     emit(render(decision))
+    return 0
+
+
+def costs_command(args):
+    """Aggregate the usage ledger: spend vs. saved. Read-only."""
+    del args
+    kinds = {}
+    tokens_in = 0
+    cost = 0.0
+    saved_tokens = 0
+    saved_events = 0
+    calls = 0
+    lines = 0
+    try:
+        with open(usage_path(), encoding="utf-8") as f:
+            rows = f.readlines()
+    except OSError:
+        rows = []
+    for raw in rows[-20000:]:
+        try:
+            event = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        lines += 1
+        kind = event.get("kind", "?")
+        kinds[kind] = kinds.get(kind, 0) + 1
+        if kind == "jev":
+            calls += 1
+            try:
+                in_tok = int(event.get("input_tokens", 0) or 0)
+            except (TypeError, ValueError):
+                in_tok = 0
+            tokens_in += in_tok
+            try:
+                cost += float(event.get("cost_usd", 0) or 0)
+            except (TypeError, ValueError):
+                pass
+        elif kind in ("cache", "reuse"):
+            saved_events += 1
+            try:
+                saved_tokens += int(event.get("saved_tokens", 0) or 0)
+            except (TypeError, ValueError):
+                pass
+        elif kind == "trivial":
+            saved_events += 1
+    print("ClearJev costs")
+    print("- jev calls: %d" % calls)
+    print("- jev input tokens: %d (~$%.6f)" % (tokens_in, cost))
+    print("- saved events (cache/reuse/trivial): %d" % saved_events)
+    print("- saved input tokens: %d (~$%.6f)" % (
+        saved_tokens, estimate_cost(saved_tokens)))
+    for kind in sorted(kinds):
+        print("  %s: %d" % (kind, kinds[kind]))
+    if not lines:
+        print("- ledger empty: no routed prompts recorded yet")
     return 0
 
 
