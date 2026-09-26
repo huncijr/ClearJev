@@ -750,6 +750,13 @@ class TestPackaging(unittest.TestCase):
                                          "plugins", "clearjev-router"))
     REPO = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 
+    def test_readme_documents_routing_flow(self):
+        text = open(os.path.join(self.REPO, "README.md")).read()
+        for token in ("Once it is ON", "$clearjev on", "Switched this session to",
+                      "gpt-5.6-sol", "gpt-5.6-luna",
+                      "What is the weather in New York today?"):
+            self.assertIn(token, text)
+
     def test_marketplace_json_is_hub_ready(self):
         with open(os.path.join(self.REPO, ".agents", "plugins",
                                "marketplace.json")) as f:

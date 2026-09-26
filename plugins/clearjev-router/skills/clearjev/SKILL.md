@@ -26,8 +26,8 @@ commands entirely, so every shell-backed action would fail.
 
 The user speaks in plain language, in any language. Interpret the message as
 exactly one control action and execute its command immediately — do not ask
-which action they want and do not show the menu. Examples: "kapcsold ki" →
-`clearjev off`; "add hozzá a Solt" → `clearjev models add ...`; "mi a státusz"
+which action they want and do not show the menu. Examples: "turn it off" →
+`clearjev off`; "add Sol" → `clearjev models add ...`; "what is the status"
 → `clearjev status`. Ask one short question first only when the request is
 genuinely ambiguous between two actions, then act.
 

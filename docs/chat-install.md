@@ -61,9 +61,9 @@ its steps manually one by one with the same effect.
 ## Controlling it from chat (after install)
 
 - Automatic: type nothing special, every prompt gets a routing recommendation.
-- `$clearjev` + plain language — the skill acts immediately, in any language:
-  `$clearjev kapcsold ki`, `$clearjev add hozzá a gpt-6-sol modellt`,
-  `$clearjev mi a státusz`. A bare `$clearjev` only returns a numbered
+- `$clearjev` + plain language — the skill acts immediately:
+  `$clearjev turn it off`, `$clearjev add the gpt-6-sol model`,
+  `$clearjev what is the status`. A bare `$clearjev` only returns a numbered
   fallback menu.
 - `/prompts:clearjev`, `/prompts:clearjev-on`, `/prompts:clearjev-off`,
   `/prompts:clearjev-add`, `/prompts:clearjev-remove`, `/prompts:clearjev-key`

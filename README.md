@@ -52,23 +52,16 @@ and stops with `ClearJev is already downloaded` (routing state preserved);
 use `install.sh --force` (or `-Force` on Windows) to reinstall.
 
 The installer copies a self-contained runtime to
-`~/.codex/clearjev-runtime`, installs the discoverable `clearjev` skill
-(`~/.codex/skills` + `~/.agents/skills`), registers the `UserPromptSubmit`
-hook in `~/.codex/hooks.json` (merged, with backup, never overwritten on
-parse errors), installs the `clearjev` shell command, and adds
-`/prompts:clearjev-*` chat aliases. Hooks are enabled by default in Codex;
-no config feature flags are written.
+`~/.codex/clearjev-runtime`, installs the `clearjev` skill, registers the
+hook in `~/.codex/hooks.json` (merged, with backup), installs the `clearjev`
+command, and adds `/prompts:clearjev-*` aliases.
 
-**API key** (get one at https://console.typesafe.ai/keys): the installer
-asks once and stores it owner-only in `~/.codex/clearjev/credentials.json`
-(never in shell profiles, never echoed). Without a key the layer still works
-(labeled heuristic fallback) — with a key it uses Jev judgments with
-confidence gating. A missing or rejected key never loops forever: after 3
-consecutive Jev failures the hook pauses Jev calls and says so in the
-block (`Jev paused after 3 failures ... run `clearjev check``); a new key
-or a passing `clearjev check` resumes them. When Jev is enabled, prompt text plus limited repository
-metadata (top-level filenames, dirty git status) is sent to TypeSafe; the
-installer discloses this before asking.
+**API key** (https://console.typesafe.ai/keys): asked once, stored
+owner-only in `~/.codex/clearjev/credentials.json`. No key = labeled
+heuristic fallback; with a key = Jev judgments. After 3 straight Jev
+failures the hook pauses Jev calls (`Jev paused ... run 'clearjev check'`);
+a new key or passing check resumes them. With Jev on, prompt text + basic
+repo metadata goes to TypeSafe (disclosed by the installer).
 
 Then restart Codex (CLI or App), review the hook once in `/hooks`, and just
 write prompts.
@@ -77,14 +70,10 @@ write prompts.
 
 ### 1. Codex CLI chat
 
-After install and restart, the `$clearjev` skill is invokable in chat.
-Just describe what you want in plain language, in any language — the skill
-acts immediately without a menu:
-
 ```
-$clearjev kapcsold ki a routingot
-$clearjev add hozzá a gpt-6-sol modellt
-$clearjev mi a státusz
+$clearjev turn off routing
+$clearjev add the gpt-6-sol model
+$clearjev what is the status
 ```
 
 Explicit commands work too (and are the safest form in scripts):
@@ -104,15 +93,30 @@ $clearjev key set '<paste-key-here>'
 $clearjev run 'Implement Stripe subscriptions with webhooks'
 ```
 
-A bare `$clearjev` (or a garbled request) returns a numbered
-on/off/status/key/models/run menu as a fallback.
+A bare `$clearjev` returns a numbered on/off/status/key/models/run menu.
 
-No-shell control (Codex CLI): where the agent cannot or should not run
-shell commands, type `clearjev on`, `clearjev off`, or `clearjev status` as
-a plain message. The hook executes it itself and the agent reports the
-result — no approval, no shell. Exact match only, so discussing ClearJev
-never toggles anything. (In the App these messages answer with a short
-CLI-only pointer instead.)
+## Once it is ON, just write prompts
+
+When routing is ON you never type `$clearjev` again — every prompt is
+routed automatically. Example session:
+
+```
+$clearjev on
+ClearJev routing ON
+
+> Build a JavaScript dashboard with charts, user auth, and a REST API backend.
+Switched this session to gpt-5.6-sol (high). ...
+
+> What is the weather in New York today?
+Switched this session to gpt-5.6-luna (low). ...
+```
+
+The dashboard task goes to Sol (multi-file coding), the weather question
+drops to Luna (cheap Q&A) — no manual `/model` switching. Exact model and
+effort may vary slightly with live Jev judgments; the fallback path above
+is deterministic. To pause: `$clearjev off` or a plain `clearjev off`
+message (the hook executes that itself, no shell needed). To check why a
+prompt routed somewhere, read the `Why:` line.
 
 Deprecated-but-working CLI/IDE aliases (installed as `~/.codex/prompts/*.md`).
 These are the one-Enter on/off switches — one action per command, no menu:
@@ -179,20 +183,15 @@ Precedence: `CLEARJEV_ENABLED` env > config file (`~/.codex/clearjev/config.json
 
 ## Model management
 
-`clearjev models available` lists the models in your local Codex catalog
-(`~/.codex/models_cache.json`) — only these can ever be recommended. The
-shipped `assets/router-config.json` holds curated profiles for known models,
-but the router is catalog-first: **any** visible catalog model is routable,
-with an inferred capability profile when no curated one exists (see
-`assets/router-config.json`, the single source of truth for curated values —
-the router loads it at startup).
+`clearjev models available` lists your local Codex catalog — only these
+models can ever be recommended. The router is catalog-first: **any** visible
+model is routable (curated profiles in `assets/router-config.json`, inferred
+otherwise).
 
-- `add` validates the slug against your catalog and filters reasoning levels
-  to what that model supports (`low, medium, high, xhigh, max, ultra` vary
-  by model).
-- `remove` only takes the model out of routing; it never touches Codex itself.
-- Reasoning levels are per model: add the ones a task needs, remove the ones
-  you never want (at least one level must remain).
+- `add` validates the slug and filters reasoning levels to what the model
+  supports (`low, medium, high, xhigh, max, ultra` vary by model).
+- `remove` only takes a model out of routing, never out of Codex.
+- Keep at least one reasoning level per model.
 
 ## Real model switching
 
@@ -251,7 +250,7 @@ plugins/clearjev-router/
   scripts/install.sh / install.ps1 / uninstall.sh / uninstall.ps1
   assets/router-config.json      # THE config: endpoint, weights, thresholds, model profiles
   references/                    # question definitions, routing rules, model notes
-tests/test_router.py             # 64 tests, no network needed
+tests/test_router.py             # 65 tests, no network needed
 ```
 
 ## How routing works
