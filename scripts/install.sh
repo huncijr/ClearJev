@@ -126,7 +126,7 @@ if [ "$can_prompt" -eq 1 ]; then
   echo ""
   echo "ClearJev sends prompt text and limited repository metadata to TypeSafe when Jev is enabled."
   echo "Get a key at https://console.typesafe.ai/keys, or press Enter for local heuristic fallback."
-  printf "TYPESAFE_API_KEY: "
+  printf "Paste your API key: "
   stty -echo </dev/tty 2>/dev/null || true
   read -r TYPESAFE_API_KEY </dev/tty || TYPESAFE_API_KEY=""
   stty echo </dev/tty 2>/dev/null || true

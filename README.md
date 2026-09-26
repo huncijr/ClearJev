@@ -35,13 +35,9 @@ Invoke-WebRequest -OutFile $env:TEMP\clearjev-install.ps1 https://raw.githubuser
 powershell -ExecutionPolicy Bypass -File $env:TEMP\clearjev-install.ps1
 ```
 
-Re-running stops with `ClearJev is already downloaded` (`--force` reinstalls).
-Routing stays ON unless you turned it off. API key
-(https://console.typesafe.ai/keys): asked once, stored owner-only in
-`~/.codex/clearjev/credentials.json`. After 3 straight Jev failures the hook
-pauses Jev calls; a new key or passing `clearjev check` resumes them.
-
-Then restart Codex, trust the hook in `/hooks`, open a new session.
+When it asks, paste your API key (https://console.typesafe.ai/keys).
+Then restart Codex, open `/hooks`, trust `ClearJev routing` (accept it so
+it can run), and open a new session.
 
 ## Chat
 
